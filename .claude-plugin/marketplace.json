@@ -1,0 +1,13 @@
+{
+  "name": "i18n-vue-plugin",
+  "owner": {
+    "name": "Chyelong"
+  },
+  "plugins": [
+    {
+      "name": "i18n-vue",
+      "source": ".",
+      "description": "Vue i18n automation plugin with init, replace, sync, and workflow skills."
+    }
+  ]
+}

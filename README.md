@@ -8,12 +8,13 @@
 - `skills/`：可调用技能（`i18n-init`、`i18n-replace`、`i18n-sync`、`i18n-workflow`）
 - `agents/`：子代理（`i18n-files`、`i18n-text`、`i18n-code`）
 
-## 通过 plugin 指令安装
+## 通过 Claude 直接安装（推荐）
 
 其他用户可直接通过以下命令安装：
 
 ```bash
-/plugin add https://github.com/Chyelong/i18n-vue-plugin.git
+/plugin marketplace add Chyelong/i18n-vue-plugin
+/plugin install i18n-vue@i18n-vue-plugin
 ```
 
 安装后可用命令示例（自动带插件命名空间）：
@@ -40,5 +41,6 @@ claude --plugin-dir /absolute/path/to/i18n-vue-plugin
 ## 发布前检查清单
 
 - `plugin.json` 中 `name`、`version`、`description` 已填写
+- `marketplace.json` 已包含 `name`、`owner`、`plugins`
 - `skills/*/SKILL.md` 与 `agents/*.md` 可正常读取
 - 安装命令可直接从 Git 地址拉取
