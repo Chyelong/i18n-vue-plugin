@@ -1,6 +1,6 @@
 {
   "name": "i18n-vue",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Vue i18n automation plugin with skills and sub-agents for init, replace, sync, workflow, translation, and review.",
   "author": {
     "name": "i18n-vue contributors"

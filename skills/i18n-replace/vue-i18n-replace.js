@@ -15,6 +15,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 // 默认配置
 const DEFAULT_CONFIG = {
@@ -550,20 +551,53 @@ class VueI18nReplacer {
   }
 
   /**
+   * 向上查找可执行的 prettier 二进制
+   */
+  findPrettierBin(startDir) {
+    let current = path.resolve(startDir);
+    const prettierBinName = process.platform === 'win32' ? 'prettier.cmd' : 'prettier';
+
+    while (true) {
+      const candidate = path.join(current, 'node_modules', '.bin', prettierBinName);
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+
+      const parent = path.dirname(current);
+      if (parent === current) {
+        return null;
+      }
+      current = parent;
+    }
+  }
+
+  /**
    * 格式化文件（调用 prettier）
    */
   formatFile(filePath) {
-    const { execSync } = require('child_process');
+    const absFilePath = path.resolve(filePath);
+    const prettierBin = this.findPrettierBin(path.dirname(absFilePath));
+
     try {
-      // 尝试使用 npx prettier 格式化
-      execSync(`npx prettier --write "${filePath}"`, {
-        stdio: 'pipe',
-        cwd: path.dirname(filePath)
-      });
+      // 优先使用项目本地安装的 prettier，避免命令环境不一致
+      if (prettierBin) {
+        execFileSync(prettierBin, ['--write', absFilePath], {
+          stdio: 'pipe',
+          cwd: path.dirname(absFilePath)
+        });
+      } else {
+        // 兜底：尝试系统 PATH 中的 prettier
+        execFileSync('prettier', ['--write', absFilePath], {
+          stdio: 'pipe',
+          cwd: process.cwd()
+        });
+      }
       console.log(`[已格式化] ${filePath}`);
     } catch (e) {
-      // prettier 不可用时静默忽略
-      console.log(`[跳过格式化] ${filePath} (prettier 不可用)`);
+      const reason = (e.stderr && e.stderr.toString().trim())
+        || (e.stdout && e.stdout.toString().trim())
+        || e.message;
+      console.log(`[跳过格式化] ${filePath} (${reason})`);
     }
   }
 
