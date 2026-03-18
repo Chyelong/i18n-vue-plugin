@@ -15,7 +15,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
 
 // 默认配置
 const DEFAULT_CONFIG = {
@@ -35,11 +34,11 @@ const CHINESE_STRING_REGEX = /(['"`])((?:(?!\1).)*[\u4e00-\u9fa5]+(?:(?!\1).)*?)
 const TEMPLATE_TEXT_REGEX = />([^<]*(?:\{\{[\s\S]*?\}\}[^<]*)*)</gs;
 
 // 匹配静态属性中的中文 (不带冒号前缀)
-// 使用 [\w-]+ 匹配完整属性名（包括 v-if、@click 等）
-const STATIC_ATTR_CHINESE_REGEX = /(?<!:)([\w@][\w-]*)="([^"]*[\u4e00-\u9fa5]+[^"]*)"/g;
+// 通过前置分组避免匹配 :attr（不使用后行断言，兼容旧版 Node.js）
+const STATIC_ATTR_CHINESE_REGEX = /(^|[\s<])([\w@][\w-]*)="([^"]*[\u4e00-\u9fa5]+[^"]*)"/g;
 
-// 匹配动态属性表达式 :attr="expression"
-const DYNAMIC_ATTR_REGEX = /:(\w+)\s*=\s*"([^"]*)"/g;
+// 匹配动态属性表达式 :attr="expression"（支持连字符，如 :data-title）
+const DYNAMIC_ATTR_REGEX = /:([\w-]+)\s*=\s*"([^"]*)"/g;
 
 // 已经被 i18n 包裹的模式（跳过）
 // 移除负向后行断言以兼容旧版 Node.js
@@ -145,13 +144,12 @@ class VueI18nReplacer {
       // 处理表达式内部的字符串字面量
       // 使用 [\s\S] 替代 . 以支持跨行匹配
       let hasChange = false;
-      const newCode = code.replace(/(['"`])((?:(?!\1)[\s\S])*[\u4e00-\u9fa5]+(?:(?!\1)[\s\S])*?)(\1)/g, (strMatch, quote, text) => {
+      const newCode = code.replace(/(['"`])((?:(?!\1)[\s\S])*[\u4e00-\u9fa5]+(?:(?!\1)[\s\S])*?)(\1)/g, (strMatch, quote, text, _endQuote, offset) => {
         if (ALREADY_I18N.test(text)) return strMatch;
 
         // 跳过比较运算符后的字符串（条件判断值）
         // 注意：只跳过比较运算符（==, ===, !=, !==, <, >, <=, >=），不跳过赋值运算符（=）
-        const strIndex = code.indexOf(strMatch);
-        const beforeStr = code.substring(0, strIndex);
+        const beforeStr = code.substring(0, offset);
         if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeStr)) {
           return strMatch;
         }
@@ -181,7 +179,7 @@ class VueI18nReplacer {
 
       let hasChange = false;
       // 处理表达式内的字符串字面量 ('xxx' 或 "xxx")
-      const newExpr = expression.replace(/(['"])(.*?)\1/g, (literalMatch, quote, literalText) => {
+      const newExpr = expression.replace(/(['"])(.*?)\1/g, (literalMatch, quote, literalText, offset) => {
         // 如果字符串内没有中文，不处理
         if (!HAS_CHINESE.test(literalText)) return literalMatch;
         // 防止重复处理
@@ -189,8 +187,7 @@ class VueI18nReplacer {
 
         // 跳过比较运算符后的字符串（条件判断值）
         // 注意：只跳过比较运算符（==, ===, !=, !==, <, >, <=, >=），不跳过赋值运算符（=）
-        const strIndex = expression.indexOf(literalMatch);
-        const beforeStr = expression.substring(0, strIndex);
+        const beforeStr = expression.substring(0, offset);
         if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeStr)) {
           return literalMatch;
         }
@@ -208,7 +205,7 @@ class VueI18nReplacer {
     });
 
     // 第三步：处理静态属性中的中文 attr="中文"
-    result = result.replace(STATIC_ATTR_CHINESE_REGEX, (match, attr, value) => {
+    result = result.replace(STATIC_ATTR_CHINESE_REGEX, (match, prefix, attr, value) => {
       // 跳过特定属性
       if (SKIP_ATTRS.includes(attr) || attr.startsWith('v-') || attr.startsWith('@')) {
         return match;
@@ -221,7 +218,7 @@ class VueI18nReplacer {
       this.recordText(value);
 
       // 静态转动态：添加冒号，整体包裹 (template 中不能用 window)
-      return `:${attr}="$t('${this.escapeQuote(value)}')"`;
+      return `${prefix}:${attr}="$t('${this.escapeQuote(value)}')"`;
     });
 
     // 第四步：处理标签内的静态文本 >文字<
@@ -505,20 +502,20 @@ class VueI18nReplacer {
   /**
    * 处理文件或目录
    */
-  process(targetPath) {
+  async process(targetPath) {
     const stats = fs.statSync(targetPath);
 
     if (stats.isDirectory()) {
-      this.processDirectory(targetPath);
+      await this.processDirectory(targetPath);
     } else if (stats.isFile() && targetPath.endsWith('.vue')) {
-      this.processFile(targetPath);
+      await this.processFile(targetPath);
     }
   }
 
   /**
    * 处理目录
    */
-  processDirectory(dirPath) {
+  async processDirectory(dirPath) {
     let files;
     try {
       files = fs.readdirSync(dirPath);
@@ -543,22 +540,21 @@ class VueI18nReplacer {
       }
 
       if (stats.isDirectory() && !file.startsWith('.') && file !== 'node_modules') {
-        this.processDirectory(fullPath);
+        await this.processDirectory(fullPath);
       } else if (file.endsWith('.vue')) {
-        this.processFile(fullPath);
+        await this.processFile(fullPath);
       }
     }
   }
 
   /**
-   * 向上查找可执行的 prettier 二进制
+   * 向上查找 node_modules 下的指定模块
    */
-  findPrettierBin(startDir) {
+  findNodeModule(startDir, moduleName) {
     let current = path.resolve(startDir);
-    const prettierBinName = process.platform === 'win32' ? 'prettier.cmd' : 'prettier';
 
     while (true) {
-      const candidate = path.join(current, 'node_modules', '.bin', prettierBinName);
+      const candidate = path.join(current, 'node_modules', moduleName);
       if (fs.existsSync(candidate)) {
         return candidate;
       }
@@ -572,31 +568,41 @@ class VueI18nReplacer {
   }
 
   /**
-   * 格式化文件（调用 prettier）
+   * 格式化文件（调用 ESLint API）
    */
-  formatFile(filePath) {
+  async formatFile(filePath) {
     const absFilePath = path.resolve(filePath);
-    const prettierBin = this.findPrettierBin(path.dirname(absFilePath));
 
     try {
-      // 优先使用项目本地安装的 prettier，避免命令环境不一致
-      if (prettierBin) {
-        execFileSync(prettierBin, ['--write', absFilePath], {
-          stdio: 'pipe',
-          cwd: path.dirname(absFilePath)
-        });
+      let eslintModule;
+      const bundledEslintPath = path.join(__dirname, 'node_modules', 'eslint');
+      const projectEslintPath = this.findNodeModule(path.dirname(absFilePath), 'eslint');
+
+      // 优先使用 skill 内置的 eslint，保证开箱即用
+      if (fs.existsSync(bundledEslintPath)) {
+        eslintModule = require(bundledEslintPath);
+      } else if (projectEslintPath) {
+        eslintModule = require(projectEslintPath);
       } else {
-        // 兜底：尝试系统 PATH 中的 prettier
-        execFileSync('prettier', ['--write', absFilePath], {
-          stdio: 'pipe',
-          cwd: process.cwd()
-        });
+        eslintModule = require('eslint');
       }
+
+      const { ESLint } = eslintModule || {};
+      if (!ESLint) {
+        console.log(`[跳过格式化] ${filePath} (未找到 ESLint API)`);
+        return;
+      }
+
+      const eslint = new ESLint({
+        cwd: path.dirname(absFilePath),
+        fix: true
+      });
+
+      const results = await eslint.lintFiles([absFilePath]);
+      await ESLint.outputFixes(results);
       console.log(`[已格式化] ${filePath}`);
     } catch (e) {
-      const reason = (e.stderr && e.stderr.toString().trim())
-        || (e.stdout && e.stdout.toString().trim())
-        || e.message;
+      const reason = (e && e.message) ? e.message : String(e);
       console.log(`[跳过格式化] ${filePath} (${reason})`);
     }
   }
@@ -604,7 +610,7 @@ class VueI18nReplacer {
   /**
    * 处理单个文件
    */
-  processFile(filePath) {
+  async processFile(filePath) {
     console.log(`处理文件: ${filePath}`);
     this.currentFile = filePath;
 
@@ -623,7 +629,7 @@ class VueI18nReplacer {
         fs.writeFileSync(filePath, processed, 'utf-8');
         console.log(`[已修改] ${filePath}`);
         // 替换完成后格式化文件
-        this.formatFile(filePath);
+        await this.formatFile(filePath);
       }
     }
   }
@@ -723,7 +729,7 @@ class VueI18nReplacer {
 }
 
 // CLI 入口
-function main() {
+async function main() {
   const args = process.argv.slice(2);
 
   if (args.length === 0 || args.includes('--help')) {
@@ -783,11 +789,14 @@ Vue i18n 中文替换工具 (中文为键)
   console.log('');
 
   const replacer = new VueI18nReplacer(options);
-  replacer.process(targetPath);
+  await replacer.process(targetPath);
   replacer.outputSummary();
   replacer.saveExtractedTexts();
 
   console.log('\n替换完成！请使用 i18n-text agent 子代理进行翻译。');
 }
 
-main();
+main().catch((e) => {
+  console.error(`执行失败: ${e && e.message ? e.message : String(e)}`);
+  process.exit(1);
+});
