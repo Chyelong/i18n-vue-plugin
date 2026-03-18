@@ -568,39 +568,42 @@ class VueI18nReplacer {
   }
 
   /**
-   * 格式化文件（调用 ESLint API）
+   * 格式化文件（调用 Prettier API）
    */
   async formatFile(filePath) {
     const absFilePath = path.resolve(filePath);
 
     try {
-      let eslintModule;
-      const bundledEslintPath = path.join(__dirname, 'node_modules', 'eslint');
-      const projectEslintPath = this.findNodeModule(path.dirname(absFilePath), 'eslint');
+      let prettier;
+      const bundledPrettierPath = path.join(__dirname, 'node_modules', 'prettier');
+      const projectPrettierPath = this.findNodeModule(path.dirname(absFilePath), 'prettier');
 
-      // 优先使用 skill 内置的 eslint，保证开箱即用
-      if (fs.existsSync(bundledEslintPath)) {
-        eslintModule = require(bundledEslintPath);
-      } else if (projectEslintPath) {
-        eslintModule = require(projectEslintPath);
+      // 优先使用 skill 内置的 prettier，保证开箱即用
+      if (fs.existsSync(bundledPrettierPath)) {
+        prettier = require(bundledPrettierPath);
+      } else if (projectPrettierPath) {
+        prettier = require(projectPrettierPath);
       } else {
-        eslintModule = require('eslint');
+        prettier = require('prettier');
       }
 
-      const { ESLint } = eslintModule || {};
-      if (!ESLint) {
-        console.log(`[跳过格式化] ${filePath} (未找到 ESLint API)`);
+      if (!prettier || typeof prettier.format !== 'function') {
+        console.log(`[跳过格式化] ${filePath} (未找到 Prettier API)`);
         return;
       }
 
-      const eslint = new ESLint({
-        cwd: path.dirname(absFilePath),
-        fix: true
+      const source = fs.readFileSync(absFilePath, 'utf-8');
+      const resolved = (typeof prettier.resolveConfig === 'function')
+        ? (await prettier.resolveConfig(absFilePath))
+        : null;
+      const formatted = await prettier.format(source, {
+        ...(resolved || {}),
+        filepath: absFilePath
       });
-
-      const results = await eslint.lintFiles([absFilePath]);
-      await ESLint.outputFixes(results);
-      console.log(`[已格式化] ${filePath}`);
+      if (formatted !== source) {
+        fs.writeFileSync(absFilePath, formatted, 'utf-8');
+      }
+      console.log(`[已格式化] ${filePath} (Prettier)`);
     } catch (e) {
       const reason = (e && e.message) ? e.message : String(e);
       console.log(`[跳过格式化] ${filePath} (${reason})`);
