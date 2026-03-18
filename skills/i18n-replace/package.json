@@ -1,6 +1,6 @@
 {
   "name": "i18n-replace",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "",
   "main": "vue-i18n-replace.js",
   "scripts": {
