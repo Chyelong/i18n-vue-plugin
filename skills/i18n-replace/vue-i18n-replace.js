@@ -10,7 +10,7 @@
  * 选项：
  *   --dry-run     只预览，不修改文件
  *   --i18n-dir    i18n 目录路径 (默认: ./src/i18n)
- *   --lang        目标语言 (默认: en)
+ *   --lang        目标语言 (默认: tw)
  */
 
 const fs = require('fs');
@@ -19,7 +19,7 @@ const path = require('path');
 // 默认配置
 const DEFAULT_CONFIG = {
   i18nDir: './src/i18n',
-  lang: 'en'
+  lang: 'tw'
 };
 
 // 匹配是否包含中文
@@ -56,8 +56,10 @@ class VueI18nReplacer {
     this.dryRun = options.dryRun || false;
     this.i18nDir = options.i18nDir || DEFAULT_CONFIG.i18nDir;
     this.lang = options.lang || DEFAULT_CONFIG.lang;
+    this.exclude = options.exclude || []; // 排除的目录/文件模式
     this.extractedTexts = new Set(); // 提取的中文文本
     this.replacements = []; // 替换记录列表
+    this.skippedLogic = []; // 因比较运算符跳过的字符串
     this.currentFile = ''; // 当前处理的文件
   }
 
@@ -340,13 +342,24 @@ class VueI18nReplacer {
 
     // 按行处理，避免跨行匹配问题
     const lines = result.split('\n');
+    let inBlockComment = false; // 多行注释状态追踪
     const processedLines = lines.map(line => {
+      // 多行注释状态追踪
+      if (inBlockComment) {
+        if (/\*\//.test(line)) inBlockComment = false;
+        return line;
+      }
+      if (/\/\*/.test(line) && !/\*\//.test(line)) {
+        inBlockComment = true;
+        return line;
+      }
+
       // 跳过 import/require 语句
       if (/^\s*(import\s+|.*require\s*\()/.test(line)) {
         return line;
       }
 
-      // 跳过注释行
+      // 跳过单行注释和 /* ... */ 同行闭合的注释
       if (/^\s*(\/\/|\/\*|\*)/.test(line)) {
         return line;
       }
@@ -368,6 +381,7 @@ class VueI18nReplacer {
         const matchIndex = line.indexOf(match);
         const beforeMatch = line.substring(0, matchIndex);
         if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: '比较运算符后的逻辑值', line: line.trim() });
           return match;
         }
 
@@ -419,12 +433,28 @@ class VueI18nReplacer {
    * @param {boolean} useWindow - 是否使用 window.$t（在 script 中使用）
    */
   processTemplateString(match, text, useWindow = false) {
+    const prefix = useWindow ? 'window.' : '';
+
     // 提取变量并生成合法的变量名
     const varMappings = []; // { expr: 'item.uid', key: 'item_uid' }
     const cleanText = text.replace(/\$\{([^}]+)\}/g, (_, expr) => {
-      const trimmedExpr = expr.trim();
-      // 生成合法变量名：替换非单词字符为下划线，移除首尾下划线
-      let safeKey = trimmedExpr.replace(/[^\w\u4e00-\u9fa5]/g, '_').replace(/_+/g, '_').replace(/(^_+|_+$)/g, '');
+      let trimmedExpr = expr.trim();
+
+      // 先用原始表达式生成合法变量名（排除中文，只保留字母数字下划线）
+      let safeKey = trimmedExpr.replace(/[^\w]/g, '_').replace(/_+/g, '_').replace(/(^_+|_+$)/g, '');
+
+      // 再处理表达式内的中文字符串（如三元 isVip ? '会员' : '普通'）
+      if (HAS_CHINESE.test(trimmedExpr)) {
+        trimmedExpr = trimmedExpr.replace(/(['"])((?:(?!\1).)*[\u4e00-\u9fa5]+(?:(?!\1).)*?)\1/g, (strMatch, quote, strText, offset) => {
+          const beforeStr = trimmedExpr.substring(0, offset);
+          // 跳过比较运算符后的字符串
+          if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeStr)) {
+            return strMatch;
+          }
+          this.recordText(strText);
+          return `${prefix}$t(${quote}${this.escapeQuote(strText)}${quote})`;
+        });
+      }
       // 如果变量名为空（比如全是特殊符号），给个保底
       if (!safeKey) safeKey = 'var_' + Math.random().toString(36).slice(2, 5);
 
@@ -440,7 +470,13 @@ class VueI18nReplacer {
       this.extractedTexts.add(normalizedText);
     }
 
-    const prefix = useWindow ? 'window.' : '';
+    // 如果外部没有中文文本（只有占位符），直接返回表达式，不需要外层 $t()
+    if (!/[\u4e00-\u9fa5]/.test(normalizedText)) {
+      if (varMappings.length === 1) {
+        return `(${varMappings[0].expr})`;
+      }
+      return varMappings.map(m => `(${m.expr})`).join(' + ');
+    }
 
     if (varMappings.length === 0) {
       const normalizedOriginal = text.replace(/\s+/g, ' ').trim();
@@ -507,7 +543,7 @@ class VueI18nReplacer {
 
     if (stats.isDirectory()) {
       await this.processDirectory(targetPath);
-    } else if (stats.isFile() && targetPath.endsWith('.vue')) {
+    } else if (stats.isFile() && (targetPath.endsWith('.vue') || targetPath.endsWith('.jsx'))) {
       await this.processFile(targetPath);
     }
   }
@@ -539,9 +575,12 @@ class VueI18nReplacer {
         continue;
       }
 
-      if (stats.isDirectory() && !file.startsWith('.') && file !== 'node_modules') {
+      if (stats.isDirectory() && !file.startsWith('.') && file !== 'node_modules' && file !== 'dist' && file !== 'build') {
+        // 检查排除模式
+        if (this.exclude.some(pattern => file === pattern || fullPath.includes(pattern))) continue;
         await this.processDirectory(fullPath);
-      } else if (file.endsWith('.vue')) {
+      } else if (file.endsWith('.vue') || file.endsWith('.jsx')) {
+        if (this.exclude.some(pattern => file === pattern || fullPath.includes(pattern))) continue;
         await this.processFile(fullPath);
       }
     }
@@ -568,9 +607,9 @@ class VueI18nReplacer {
   }
 
   /**
-   * 格式化文件（调用 Prettier API）
+   * 格式化内容（调用 Prettier API，内存中格式化避免双倍 IO）
    */
-  async formatFile(filePath) {
+  async formatContent(content, filePath) {
     const absFilePath = path.resolve(filePath);
 
     try {
@@ -578,7 +617,6 @@ class VueI18nReplacer {
       const bundledPrettierPath = path.join(__dirname, 'node_modules', 'prettier');
       const projectPrettierPath = this.findNodeModule(path.dirname(absFilePath), 'prettier');
 
-      // 优先使用 skill 内置的 prettier，保证开箱即用
       if (fs.existsSync(bundledPrettierPath)) {
         prettier = require(bundledPrettierPath);
       } else if (projectPrettierPath) {
@@ -589,25 +627,46 @@ class VueI18nReplacer {
 
       if (!prettier || typeof prettier.format !== 'function') {
         console.log(`[跳过格式化] ${filePath} (未找到 Prettier API)`);
-        return;
+        return content;
       }
 
-      const source = fs.readFileSync(absFilePath, 'utf-8');
       const resolved = (typeof prettier.resolveConfig === 'function')
         ? (await prettier.resolveConfig(absFilePath))
         : null;
-      const formatted = await prettier.format(source, {
+      const formatted = await prettier.format(content, {
         ...(resolved || {}),
         filepath: absFilePath
       });
-      if (formatted !== source) {
-        fs.writeFileSync(absFilePath, formatted, 'utf-8');
-      }
       console.log(`[已格式化] ${filePath} (Prettier)`);
+      return formatted;
     } catch (e) {
       const reason = (e && e.message) ? e.message : String(e);
       console.log(`[跳过格式化] ${filePath} (${reason})`);
+      return content;
     }
+  }
+
+  /**
+   * 生成简易 diff 输出（用于 dry-run 预览）
+   */
+  showDiff(original, processed, filePath) {
+    const origLines = original.split('\n');
+    const procLines = processed.split('\n');
+    const maxLen = Math.max(origLines.length, procLines.length);
+    let diffCount = 0;
+
+    console.log(`[预览] 将修改: ${filePath}`);
+    console.log('---');
+    for (let i = 0; i < maxLen && diffCount < 15; i++) {
+      if (origLines[i] !== procLines[i]) {
+        console.log(`  L${i + 1}:`);
+        if (origLines[i] !== undefined) console.log(`  - ${origLines[i]}`);
+        if (procLines[i] !== undefined) console.log(`  + ${procLines[i]}`);
+        diffCount++;
+      }
+    }
+    if (diffCount >= 15) console.log(`  ... 还有更多变更`);
+    console.log('');
   }
 
   /**
@@ -622,17 +681,12 @@ class VueI18nReplacer {
 
     if (content !== processed) {
       if (this.dryRun) {
-        console.log(`[预览] 将修改: ${filePath}`);
-        // 显示部分差异
-        const lines = processed.split('\n').slice(0, 30);
-        console.log('---');
-        console.log(lines.join('\n'));
-        console.log('...\n');
+        this.showDiff(content, processed, filePath);
       } else {
-        fs.writeFileSync(filePath, processed, 'utf-8');
+        // 先格式化再写入，避免双倍 IO
+        const formatted = await this.formatContent(processed, filePath);
+        fs.writeFileSync(filePath, formatted, 'utf-8');
         console.log(`[已修改] ${filePath}`);
-        // 替换完成后格式化文件
-        await this.formatFile(filePath);
       }
     }
   }
@@ -728,6 +782,16 @@ class VueI18nReplacer {
       texts.slice(0, 20).forEach(t => console.log(`  "${t}"`));
       console.log(`  ... 还有 ${texts.length - 20} 条`);
     }
+
+    // 输出因比较运算符跳过的字符串
+    if (this.skippedLogic.length > 0) {
+      console.log(`\n=== 跳过的逻辑值（${this.skippedLogic.length} 处）===`);
+      console.log('以下中文出现在比较运算符后，被判定为逻辑值而非展示文本，未替换：');
+      this.skippedLogic.forEach(s => {
+        console.log(`  [${s.file}] "${s.text}" — ${s.reason}`);
+        console.log(`    ${s.line}`);
+      });
+    }
   }
 }
 
@@ -743,18 +807,17 @@ Vue i18n 中文替换工具 (中文为键)
   node vue-i18n-replace.js <file|directory> [options]
 
 选项：
-  --dry-run       只预览，不修改文件
+  --dry-run       只预览，不修改文件（显示 diff 对比）
   --i18n-dir      i18n 目录路径 (默认: ./src/i18n)
-  --lang          目标语言 (默认: en)
+  --lang          目标语言 (默认: tw)
+  --exclude       排除的目录或文件，逗号分隔 (如: vendors,legacy)
 
 示例：
   node vue-i18n-replace.js ./src --dry-run
   node vue-i18n-replace.js ./src --i18n-dir ./src/i18n --lang en
+  node vue-i18n-replace.js ./src --exclude vendors,legacy
 
-工作流程：
-  1. 扫描 Vue 文件，用 $t('中文') 包裹中文文本
-  2. 将中文 key 写入 <i18n-dir>/<lang>.json（翻译值留空）
-  3. 由 AI i18n-text agent 子代理完成翻译
+支持文件类型：.vue .jsx
 `);
     process.exit(0);
   }
@@ -773,15 +836,27 @@ Vue i18n 中文替换工具 (中文为键)
     return value;
   };
 
+  const excludeStr = getArgValue('--exclude', '');
   const options = {
     dryRun: args.includes('--dry-run'),
     i18nDir: getArgValue('--i18n-dir', DEFAULT_CONFIG.i18nDir),
-    lang: getArgValue('--lang', DEFAULT_CONFIG.lang)
+    lang: getArgValue('--lang', DEFAULT_CONFIG.lang),
+    exclude: excludeStr ? excludeStr.split(',').map(s => s.trim()) : []
   };
 
   if (!fs.existsSync(targetPath)) {
     console.error(`错误: 路径不存在 - ${targetPath}`);
     process.exit(1);
+  }
+
+  // 校验 i18n 目录是否已初始化（dry-run 模式跳过，预览不需要写入）
+  if (!options.dryRun) {
+    const i18nIndex = path.join(options.i18nDir, 'index.js');
+    if (!fs.existsSync(options.i18nDir) || !fs.existsSync(i18nIndex)) {
+      console.error(`错误: i18n 目录未初始化 - ${options.i18nDir}`);
+      console.error(`请先运行 /i18n-init 初始化 i18n 目录`);
+      process.exit(1);
+    }
   }
 
   console.log('=== Vue i18n 替换工具 ===');

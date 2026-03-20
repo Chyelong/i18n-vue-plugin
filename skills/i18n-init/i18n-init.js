@@ -7,7 +7,7 @@
  *   node i18n-init.js <directory> [options]
  *
  * 选项：
- *   --langs      需要翻译的目标语言，逗号分隔 (默认: en)
+ *   --langs      需要翻译的目标语言，逗号分隔 (默认: tw)
  *   --type       输出类型: esm, browser, vue (默认: vue)
  */
 
@@ -16,7 +16,7 @@ const path = require('path');
 
 // 默认配置
 const DEFAULT_CONFIG = {
-  langs: ['en']
+  langs: ['tw']
 };
 
 // i18n.js 模板 - 简化版，只负责切换语言和翻译查找，不请求 API
@@ -465,12 +465,60 @@ const I18N_BROWSER_TEMPLATE = `/**
     return currentLang;
   }
 
+  /**
+   * 应用 data-i18n 属性翻译（配合 html-i18n-replace.js 使用）
+   * 遍历 DOM 中所有带 data-i18n 标记的元素，替换文本和属性
+   */
+  function applyI18n(root) {
+    root = root || document;
+
+    // 替换文本内容（仅替换没有子元素的纯文本节点，避免覆盖子元素）
+    var elements = root.querySelectorAll('[data-i18n]');
+    for (var i = 0; i < elements.length; i++) {
+      var el = elements[i];
+      var key = el.getAttribute('data-i18n');
+      if (!key) continue;
+
+      // 如果元素没有子元素，直接替换 textContent
+      if (el.children.length === 0) {
+        el.textContent = $t(key);
+      } else {
+        // 有子元素时，只替换直接文本节点，保留子元素
+        var childNodes = el.childNodes;
+        for (var c = 0; c < childNodes.length; c++) {
+          if (childNodes[c].nodeType === 3 && childNodes[c].textContent.trim()) {
+            childNodes[c].textContent = $t(key);
+            break; // 只替换第一个非空文本节点
+          }
+        }
+      }
+    }
+
+    // 替换属性（data-i18n-placeholder, data-i18n-title 等）
+    var allElements = root.querySelectorAll('*');
+    for (var j = 0; j < allElements.length; j++) {
+      var node = allElements[j];
+      var attrs = node.attributes;
+      for (var k = 0; k < attrs.length; k++) {
+        var attrName = attrs[k].name;
+        if (attrName.indexOf('data-i18n-') === 0) {
+          var targetAttr = attrName.replace('data-i18n-', '');
+          var attrKey = attrs[k].value;
+          if (attrKey && targetAttr) {
+            node.setAttribute(targetAttr, $t(attrKey));
+          }
+        }
+      }
+    }
+  }
+
   // 导出到全局
   global.i18n = {
     $t: $t,
     initI18n: initI18n,
     setLang: setLang,
     getLang: getLang,
+    applyI18n: applyI18n,
     messages: messages
   };
 
@@ -479,6 +527,7 @@ const I18N_BROWSER_TEMPLATE = `/**
   global.$setLang = setLang;
   global.$getLang = getLang;
   global.initI18n = initI18n;
+  global.applyI18n = applyI18n;
 
 })(typeof window !== 'undefined' ? window : this);
 `;
@@ -585,14 +634,14 @@ i18n 初始化工具 (中文为键)
   node i18n-init.js <directory> [options]
 
 选项：
-  --langs      目标语言，逗号分隔 (默认: en)
+  --langs      目标语言，逗号分隔 (默认: tw)
   --type       输出类型: esm, browser, vue (默认: vue)
 
 示例：
-  node i18n-init.js ./src/i18n
-  node i18n-init.js ./src/i18n --langs en,ja,ko
-  node i18n-init.js ./public/i18n --type browser
-  node i18n-init.js ./src/i18n --type vue
+  node i18n-init.js ./src/i18n                        # Vue 项目
+  node i18n-init.js ./src/i18n --langs en,ja,ko        # 多语言
+  node i18n-init.js ./i18n --type browser              # 静态 HTML/JS 项目（根目录下）
+  node i18n-init.js ./src/i18n --type vue              # Vue 项目
 
 生成文件：
   index.js     核心模块（切换语言、$t 方法）
@@ -618,7 +667,7 @@ i18n 初始化工具 (中文为键)
   };
 
   const options = {
-    langs: langsIndex !== -1 ? getArgValue(langsIndex, 'en').split(',') : ['en'],
+    langs: langsIndex !== -1 ? getArgValue(langsIndex, 'tw').split(',') : ['tw'],
     type: getArgValue(typeIndex, 'vue')
   };
 

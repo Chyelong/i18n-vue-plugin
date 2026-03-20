@@ -9,7 +9,7 @@
  *
  * 选项：
  *   --i18n-dir    i18n 目录路径 (默认: ./src/i18n)
- *   --lang        目标语言 (默认: en)
+ *   --lang        目标语言 (默认: tw)
  *   --dry-run     只预览，不修改文件
  */
 
@@ -19,14 +19,17 @@ const path = require('path');
 // 默认配置
 const DEFAULT_CONFIG = {
   i18nDir: './src/i18n',
-  lang: 'en'
+  lang: 'tw'
 };
 
-// 匹配 $t('中文') 或 $t("中文") 中的中文文本
-const I18N_CALL_REGEX = /\$t\s*\(\s*(['"])([\u4e00-\u9fa5][^'"]*)\1/g;
+// 匹配 $t('...中文...') 中的中文文本（支持字符串内含其他引号）
+const I18N_CALL_REGEX = /\$t\s*\(\s*(['"`])((?:(?!\1).)*[\u4e00-\u9fa5]+(?:(?!\1).)*?)\1/g;
 
-// 匹配 window.$t('中文')
-const WINDOW_I18N_CALL_REGEX = /window\.\$t\s*\(\s*(['"])([\u4e00-\u9fa5][^'"]*)\1/g;
+// 匹配 window.$t('...中文...')
+const WINDOW_I18N_CALL_REGEX = /window\.\$t\s*\(\s*(['"`])((?:(?!\1).)*[\u4e00-\u9fa5]+(?:(?!\1).)*?)\1/g;
+
+// 匹配 data-i18n="中文" 和 data-i18n-{attr}="中文"
+const DATA_I18N_REGEX = /data-i18n(?:-[\w-]+)?\s*=\s*"([^"]*[\u4e00-\u9fa5]+[^"]*)"/g;
 
 class I18nSyncer {
   constructor(options = {}) {
@@ -56,6 +59,15 @@ class I18nSyncer {
       }
     }
     WINDOW_I18N_CALL_REGEX.lastIndex = 0;
+
+    // 提取 data-i18n / data-i18n-{attr} 属性中的中文（HTML 文件）
+    while ((match = DATA_I18N_REGEX.exec(content)) !== null) {
+      const text = match[1].trim();
+      if (text) {
+        this.extractedTexts.add(text);
+      }
+    }
+    DATA_I18N_REGEX.lastIndex = 0;
   }
 
   /**
@@ -63,7 +75,7 @@ class I18nSyncer {
    */
   processFile(filePath) {
     const ext = path.extname(filePath).toLowerCase();
-    if (!['.vue', '.js', '.ts', '.jsx', '.tsx'].includes(ext)) {
+    if (!['.vue', '.js', '.ts', '.jsx', '.tsx', '.html', '.htm'].includes(ext)) {
       return;
     }
 
@@ -169,7 +181,7 @@ class I18nSyncer {
     const texts = Array.from(this.extractedTexts);
 
     console.log(`\n=== 扫描结果 ===`);
-    console.log(`共找到 ${texts.length} 条 $t() 调用`);
+    console.log(`共找到 ${texts.length} 条 i18n 标记（$t() 调用 + data-i18n 属性）`);
 
     if (texts.length === 0) {
       console.log('没有找到需要翻译的文本');
@@ -227,7 +239,7 @@ i18n 翻译同步工具
 
 选项：
   --i18n-dir    i18n 目录路径 (默认: ./src/i18n)
-  --lang        目标语言 (默认: en)
+  --lang        目标语言 (默认: tw)
   --dry-run     只预览，不修改文件
 
 示例：
@@ -237,11 +249,13 @@ i18n 翻译同步工具
   node sync-i18n.js ./src/views/Home.vue
 
 功能：
-  1. 扫描代码中所有 $t('中文') 和 window.$t('中文') 调用
+  1. 扫描代码中所有 $t('中文')、window.$t('中文') 调用和 data-i18n 属性
   2. 提取中文文本
   3. 与现有翻译文件对比，找出未翻译的文本
   4. 将未翻译的 key 写入语言文件（空值占位）
   5. 由 agent i18n-text 子代理完成翻译
+
+支持文件类型：.vue .js .ts .jsx .tsx .html .htm
 `);
     process.exit(0);
   }

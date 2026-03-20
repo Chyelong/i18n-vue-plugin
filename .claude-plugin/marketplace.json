@@ -7,7 +7,7 @@
     {
       "name": "i18n-vue",
       "source": "./",
-      "description": "Vue i18n automation plugin with init, replace, sync, and workflow skills."
+      "description": "i18n automation plugin for Vue and static HTML/JS projects, with init, replace, sync, and workflow skills."
     }
   ]
 }
