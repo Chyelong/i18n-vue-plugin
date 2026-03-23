@@ -46,6 +46,48 @@ let currentLang = 'zh';
 // 支持的语言代码（防止路径遍历攻击）
 const VALID_LANG_REGEX = /^[a-z]{2}(-[A-Z]{2})?$/;
 
+// 图片 CSS 变量注册表 { varName: originalPath }
+const imgVarRegistry = {};
+
+/**
+ * 图片路径转换
+ * @param {string} path - 原始图片路径
+ * @returns {string} 当前语言对应的图片路径
+ * @example $img('/images/banner.png') // tw → '/images/banner_tw.png'
+ */
+function $img(path) {
+  if (currentLang === 'zh' || !path) return path;
+  const cleanPath = path.split('?')[0].split('#')[0];
+  const suffix = path.substring(cleanPath.length);
+  const dotIndex = cleanPath.lastIndexOf('.');
+  if (dotIndex === -1) return path;
+  return cleanPath.substring(0, dotIndex) + '_' + currentLang + cleanPath.substring(dotIndex) + suffix;
+}
+
+/**
+ * 设置图片 CSS 变量
+ * @param {string} varName - CSS 变量名，如 '--banner-bg'
+ * @param {string} path - 原始图片路径
+ * @example $imgVar('--banner-bg', '/images/banner.png')
+ *          // CSS 中使用: background-image: var(--banner-bg);
+ */
+function $imgVar(varName, path) {
+  imgVarRegistry[varName] = path;
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.setProperty(varName, "url('" + $img(path) + "')");
+  }
+}
+
+/**
+ * 更新所有已注册的图片 CSS 变量（语言切换时自动调用）
+ */
+function _updateImgVars() {
+  if (typeof document === 'undefined') return;
+  for (const varName in imgVarRegistry) {
+    document.documentElement.style.setProperty(varName, "url('" + $img(imgVarRegistry[varName]) + "')");
+  }
+}
+
 /**
  * 插值处理
  */
@@ -124,6 +166,9 @@ async function initI18n(lang) {
     document.documentElement.lang = lang;
   }
 
+  // 更新图片 CSS 变量
+  _updateImgVars();
+
   console.log(\`[i18n] Initialized with language: \${lang}\`);
 }
 
@@ -156,6 +201,9 @@ async function setLang(lang, options = {}) {
   if (save && typeof localStorage !== 'undefined') {
     localStorage.setItem(LANG_STORAGE_KEY, lang);
   }
+
+  // 更新图片 CSS 变量
+  _updateImgVars();
 
   // 触发语言切换事件
   langChangeListeners.forEach(fn => {
@@ -201,6 +249,8 @@ function onLangChange(callback) {
 // 注册到 window 全局
 if (typeof window !== 'undefined') {
   window.$t = $t;
+  window.$img = $img;
+  window.$imgVar = $imgVar;
   window.$setLang = setLang;
   window.$getLang = getLang;
   window.$getSupportedLangs = getSupportedLangs;
@@ -208,15 +258,15 @@ if (typeof window !== 'undefined') {
   window.initI18n = initI18n;
 }
 
-export { $t, initI18n, setLang, getLang, getSupportedLangs, onLangChange, messages, SUPPORTED_LANGS };
-export default { $t, initI18n, setLang, getLang, getSupportedLangs, onLangChange };
+export { $t, $img, $imgVar, initI18n, setLang, getLang, getSupportedLangs, onLangChange, messages, SUPPORTED_LANGS };
+export default { $t, $img, $imgVar, initI18n, setLang, getLang, getSupportedLangs, onLangChange };
 `;
 
 // ESM 版本
 const I18N_ESM_TEMPLATE = `/**
  * i18n 国际化模块
  * 基准语言：中文简体
- * 使用方式：t("中文文本") 返回对应语言的翻译
+ * 使用方式：$t("中文文本") 返回对应语言的翻译
  */
 
 // 当前语言
@@ -230,6 +280,45 @@ const messages = {
 
 // 支持的语言代码（防止路径遍历攻击）
 const VALID_LANG_REGEX = /^[a-z]{2}(-[A-Z]{2})?$/;
+
+// 图片 CSS 变量注册表 { varName: originalPath }
+const imgVarRegistry = {};
+
+/**
+ * 图片路径转换
+ * @param {string} path - 原始图片路径
+ * @returns {string} 当前语言对应的图片路径
+ */
+function $img(path) {
+  if (currentLang === 'zh' || !path) return path;
+  const cleanPath = path.split('?')[0].split('#')[0];
+  const suffix = path.substring(cleanPath.length);
+  const dotIndex = cleanPath.lastIndexOf('.');
+  if (dotIndex === -1) return path;
+  return cleanPath.substring(0, dotIndex) + '_' + currentLang + cleanPath.substring(dotIndex) + suffix;
+}
+
+/**
+ * 设置图片 CSS 变量
+ * @param {string} varName - CSS 变量名，如 '--banner-bg'
+ * @param {string} path - 原始图片路径
+ */
+function $imgVar(varName, path) {
+  imgVarRegistry[varName] = path;
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.setProperty(varName, "url('" + $img(path) + "')");
+  }
+}
+
+/**
+ * 更新所有已注册的图片 CSS 变量
+ */
+function _updateImgVars() {
+  if (typeof document === 'undefined') return;
+  for (const varName in imgVarRegistry) {
+    document.documentElement.style.setProperty(varName, "url('" + $img(imgVarRegistry[varName]) + "')");
+  }
+}
 
 /**
  * 加载语言包
@@ -265,6 +354,8 @@ async function initI18n(lang = 'zh') {
   if (typeof document !== 'undefined') {
     document.documentElement.lang = lang;
   }
+  // 更新图片 CSS 变量
+  _updateImgVars();
   console.log(\`[i18n] Initialized with language: \${lang}\`);
 }
 
@@ -287,7 +378,7 @@ function interpolate(text, params) {
  * @param {object} params - 插值参数 { name: '张三' }
  * @returns {string} 翻译后的文本
  */
-function t(text, params = {}) {
+function $t(text, params = {}) {
   if (currentLang === 'zh') {
     return interpolate(text, params);
   }
@@ -315,6 +406,8 @@ async function setLang(lang) {
   if (typeof document !== 'undefined') {
     document.documentElement.lang = lang;
   }
+  // 更新图片 CSS 变量
+  _updateImgVars();
 }
 
 /**
@@ -325,8 +418,8 @@ function getLang() {
 }
 
 // 导出
-export { t, initI18n, setLang, getLang, messages };
-export default { t, initI18n, setLang, getLang };
+export { $t, $img, $imgVar, initI18n, setLang, getLang, messages };
+export default { $t, $img, $imgVar, initI18n, setLang, getLang };
 `;
 
 // 浏览器版本 (使用 window 全局变量 $t)
@@ -348,6 +441,45 @@ const I18N_BROWSER_TEMPLATE = `/**
 
   // 支持的语言代码（防止路径遍历攻击）
   const VALID_LANG_REGEX = /^[a-z]{2}(-[A-Z]{2})?$/;
+
+  // 图片 CSS 变量注册表 { varName: originalPath }
+  var imgVarRegistry = {};
+
+  /**
+   * 图片路径转换
+   * @param {string} path - 原始图片路径
+   * @returns {string} 当前语言对应的图片路径
+   */
+  function $img(path) {
+    if (currentLang === 'zh' || !path) return path;
+    var cleanPath = path.split('?')[0].split('#')[0];
+    var suffix = path.substring(cleanPath.length);
+    var dotIndex = cleanPath.lastIndexOf('.');
+    if (dotIndex === -1) return path;
+    return cleanPath.substring(0, dotIndex) + '_' + currentLang + cleanPath.substring(dotIndex) + suffix;
+  }
+
+  /**
+   * 设置图片 CSS 变量
+   * @param {string} varName - CSS 变量名，如 '--banner-bg'
+   * @param {string} path - 原始图片路径
+   */
+  function $imgVar(varName, path) {
+    imgVarRegistry[varName] = path;
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.setProperty(varName, "url('" + $img(path) + "')");
+    }
+  }
+
+  /**
+   * 更新所有已注册的图片 CSS 变量
+   */
+  function _updateImgVars() {
+    if (typeof document === 'undefined') return;
+    for (var varName in imgVarRegistry) {
+      document.documentElement.style.setProperty(varName, "url('" + $img(imgVarRegistry[varName]) + "')");
+    }
+  }
 
   /**
    * 加载语言包
@@ -397,6 +529,8 @@ const I18N_BROWSER_TEMPLATE = `/**
     if (typeof document !== 'undefined') {
       document.documentElement.lang = currentLang;
     }
+    // 更新图片 CSS 变量
+    _updateImgVars();
     if (currentLang !== 'zh') {
       loadLang(currentLang, callback);
     } else {
@@ -442,18 +576,18 @@ const I18N_BROWSER_TEMPLATE = `/**
     if (lang !== 'zh' && Object.keys(messages[lang] || {}).length === 0) {
       loadLang(lang, function() {
         currentLang = lang;
-        // 设置 HTML lang 属性
         if (typeof document !== 'undefined') {
           document.documentElement.lang = lang;
         }
+        _updateImgVars();
         callback && callback();
       });
     } else {
       currentLang = lang;
-      // 设置 HTML lang 属性
       if (typeof document !== 'undefined') {
         document.documentElement.lang = lang;
       }
+      _updateImgVars();
       callback && callback();
     }
   }
@@ -515,6 +649,8 @@ const I18N_BROWSER_TEMPLATE = `/**
   // 导出到全局
   global.i18n = {
     $t: $t,
+    $img: $img,
+    $imgVar: $imgVar,
     initI18n: initI18n,
     setLang: setLang,
     getLang: getLang,
@@ -524,6 +660,8 @@ const I18N_BROWSER_TEMPLATE = `/**
 
   // 快捷方式
   global.$t = $t;
+  global.$img = $img;
+  global.$imgVar = $imgVar;
   global.$setLang = setLang;
   global.$getLang = getLang;
   global.initI18n = initI18n;

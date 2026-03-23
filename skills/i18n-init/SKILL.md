@@ -39,7 +39,7 @@ description: 初始化项目 i18n 目录。触发词：i18n初始化、国际化
 |------|----------|-------------|
 | vue | Vue 项目 | `this.$t()` / `window.$t()` |
 | browser | 静态 HTML/JS 项目 | `window.$t()` + `data-i18n` 属性 |
-| esm | ESM 模块项目 | `import { t } from './i18n'` |
+| esm | ESM 模块项目 | `import { $t } from './i18n'` |
 
 ## AI 执行规则
 
@@ -64,11 +64,13 @@ node <skill-directory>/i18n-init.js <目标路径> --type <type> --langs <语言
 
 ```javascript
 import './i18n'
-import { $t } from './i18n'
+import { $t, $img, $imgVar } from './i18n'
 
 import Vue from 'vue'
 
 Vue.prototype.$t = $t
+Vue.prototype.$img = $img
+Vue.prototype.$imgVar = $imgVar
 ```
 
 #### 静态 HTML/JS 项目（--type browser）
@@ -94,7 +96,7 @@ Vue.prototype.$t = $t
 在入口文件中导入：
 
 ```javascript
-import { t, initI18n } from './i18n'
+import { $t, $img, $imgVar, initI18n } from './i18n'
 
 await initI18n('en');
 ```
