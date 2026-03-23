@@ -593,28 +593,24 @@ const I18N_BROWSER_TEMPLATE = `/**
       return;
     }
 
-    // 检查是否已通过 script 标签加载
-    const globalKey = 'i18n_' + lang;
-    if (global[globalKey]) {
-      messages[lang] = global[globalKey];
-      callback && callback();
-      return;
-    }
-
-    // 动态加载脚本
-    const script = document.createElement('script');
-    script.src = './' + lang + '.js';
-    script.onload = function() {
-      if (global[globalKey]) {
-        messages[lang] = global[globalKey];
+    // 通过 fetch 加载 JSON 语言包
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', './i18n/' + lang + '.json', true);
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === 4) {
+        if (xhr.status === 200) {
+          try {
+            messages[lang] = JSON.parse(xhr.responseText);
+          } catch(e) {
+            console.warn('[i18n] Failed to parse ' + lang + ' language pack');
+          }
+        } else {
+          console.warn('[i18n] Failed to load ' + lang + ' language pack');
+        }
+        callback && callback();
       }
-      callback && callback();
     };
-    script.onerror = function() {
-      console.warn('[i18n] Failed to load ' + lang + ' language pack');
-      callback && callback();
-    };
-    document.head.appendChild(script);
+    xhr.send();
   }
 
   /**
@@ -847,20 +843,6 @@ class I18nInitializer {
       console.log(`生成: ${lang}.json`);
     }
 
-    // 为浏览器环境生成 JS 格式的语言包
-    if (this.type === 'browser') {
-      for (const lang of this.langs) {
-        const jsonPath = path.join(dir, `${lang}.json`);
-        const jsPath = path.join(dir, `${lang}.js`);
-
-        if (fs.existsSync(jsonPath)) {
-          const data = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
-          const jsContent = `/**\n * ${lang.toUpperCase()} 语言包\n */\nwindow.i18n_${lang} = ${JSON.stringify(data, null, 2)};`;
-          fs.writeFileSync(jsPath, jsContent, 'utf-8');
-          console.log(`生成: ${lang}.js (浏览器版)`);
-        }
-      }
-    }
   }
 }
 
