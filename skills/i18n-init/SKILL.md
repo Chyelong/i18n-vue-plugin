@@ -58,31 +58,61 @@ node <skill-directory>/i18n-init.js <目标路径> --type <type> --langs <语言
 
 ### 3. 修改入口文件（按类型区分）
 
+#### 语言自动检测
+
+i18n 模块在**加载阶段**会同步检测当前语言（确保 `$img` 等函数在其他模块的顶层代码中也能正确工作），检测优先级：
+
+| 优先级 | 来源 | 说明 |
+|--------|------|------|
+| 1 | `window.__I18N_LANG__` | JS 全局变量，后台可在页面模板注入 |
+| 2 | URL 参数 `?lang=tw` | 后台重定向或前端拼接 |
+| 3 | Cookie `i18n_lang=tw` | 后台设置 cookie |
+| 4 | `localStorage` `i18n_lang` | `initI18n()` 调用后自动保存 |
+| 5 | `<html lang="tw">` | 后台在 HTML 模板设置 |
+| 6 | 默认 `zh` | 以上都没有时 |
+
+后台只需通过**任意一种方式**传递语言即可，无需前端手动配置。
+
 #### Vue 项目（--type vue）
 
 修改 `main.js`（在最前面添加）：
 
 ```javascript
 import './i18n'
-import { $t, $img, $imgVar } from './i18n'
+import { $t, $img, $imgVar, initI18n } from './i18n'
 
 import Vue from 'vue'
 
 Vue.prototype.$t = $t
 Vue.prototype.$img = $img
 Vue.prototype.$imgVar = $imgVar
+
+// 加载翻译数据（语言已在模块加载时自动检测）
+initI18n();
 ```
+
+如果后台通过接口返回语言，在获取后调用 `initI18n('tw')` 即可，它会同时保存到 localStorage，后续访问自动生效。
 
 #### 静态 HTML/JS 项目（--type browser）
 
-在 HTML 文件的 `<head>` 或 `<body>` 末尾引入：
+后台在页面模板中注入语言（任选一种）：
+
+```html
+<!-- 方式一：后台注入全局变量 -->
+<script>window.__I18N_LANG__ = '{{ backend_lang }}';</script>
+
+<!-- 方式二：后台设置 HTML lang 属性 -->
+<html lang="{{ backend_lang }}">
+
+<!-- 方式三：后台设置 cookie（无需额外前端代码） -->
+```
+
+然后引入 i18n：
 
 ```html
 <script src="./i18n/index.js"></script>
 <script>
-  // 初始化 i18n（可选指定语言，默认中文）
   initI18n();
-  // 应用 data-i18n 属性翻译
   document.addEventListener('DOMContentLoaded', function() {
     applyI18n();
   });
@@ -98,7 +128,7 @@ Vue.prototype.$imgVar = $imgVar
 ```javascript
 import { $t, $img, $imgVar, initI18n } from './i18n'
 
-await initI18n('en');
+await initI18n();
 ```
 
 ## 生成文件

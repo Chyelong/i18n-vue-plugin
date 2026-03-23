@@ -41,7 +41,35 @@ const langChangeListeners = [];
 // localStorage key
 const LANG_STORAGE_KEY = 'i18n_lang';
 
-let currentLang = 'zh';
+// 模块加载时立即检测语言（同步，确保 $img 等在其他模块顶层代码中可用）
+// 优先级：window.__I18N_LANG__ > URL参数lang > cookie i18n_lang > localStorage > html[lang] > 默认 zh
+let currentLang = (function() {
+  try {
+    // 1. 全局变量预配置
+    if (typeof window !== 'undefined' && window.__I18N_LANG__) return window.__I18N_LANG__;
+    // 2. URL 参数 ?lang=tw
+    if (typeof location !== 'undefined') {
+      var m = location.search.match(/[?&]lang=([^&]+)/);
+      if (m) return decodeURIComponent(m[1]);
+    }
+    // 3. Cookie
+    if (typeof document !== 'undefined' && document.cookie) {
+      var c = document.cookie.match(/(?:^|;\\s*)i18n_lang=([^;]+)/);
+      if (c) return decodeURIComponent(c[1]);
+    }
+    // 4. localStorage
+    if (typeof localStorage !== 'undefined') {
+      var saved = localStorage.getItem('i18n_lang');
+      if (saved) return saved;
+    }
+    // 5. HTML lang 属性（后台可通过模板设置 <html lang="tw">）
+    if (typeof document !== 'undefined' && document.documentElement.lang && document.documentElement.lang !== 'zh') {
+      return document.documentElement.lang;
+    }
+    return 'zh';
+  } catch(e) { return 'zh'; }
+})();
+const _initialLang = currentLang; // 记录模块加载时的语言，用于 initI18n 判断是否需要刷新
 
 // 支持的语言代码（防止路径遍历攻击）
 const VALID_LANG_REGEX = /^[a-z]{2}(-[A-Z]{2})?$/;
@@ -152,6 +180,20 @@ async function initI18n(lang) {
     }
   }
   lang = lang || 'zh';
+
+  // 如果目标语言和模块加载时检测到的语言不同，说明模块加载阶段用了错误的语言
+  // 其他模块顶层的 $img() 调用结果已经是错的，需要保存后刷新页面
+  // 刷新后 localStorage 已有正确值，模块加载时就能拿到正确语言，不会再刷
+  if (lang !== _initialLang) {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(LANG_STORAGE_KEY, lang);
+    }
+    if (typeof location !== 'undefined') {
+      console.log(\`[i18n] Language mismatch (module loaded: \${_initialLang}, target: \${lang}), reloading...\`);
+      location.reload();
+      return;
+    }
+  }
 
   currentLang = lang;
   if (lang !== 'zh') await loadLang(lang);
@@ -269,8 +311,30 @@ const I18N_ESM_TEMPLATE = `/**
  * 使用方式：$t("中文文本") 返回对应语言的翻译
  */
 
-// 当前语言
-let currentLang = 'zh';
+// 模块加载时立即检测语言（同步）
+// 优先级：window.__I18N_LANG__ > URL参数lang > cookie > localStorage > html[lang] > 默认 zh
+let currentLang = (function() {
+  try {
+    if (typeof window !== 'undefined' && window.__I18N_LANG__) return window.__I18N_LANG__;
+    if (typeof location !== 'undefined') {
+      var m = location.search.match(/[?&]lang=([^&]+)/);
+      if (m) return decodeURIComponent(m[1]);
+    }
+    if (typeof document !== 'undefined' && document.cookie) {
+      var c = document.cookie.match(/(?:^|;\\s*)i18n_lang=([^;]+)/);
+      if (c) return decodeURIComponent(c[1]);
+    }
+    if (typeof localStorage !== 'undefined') {
+      var saved = localStorage.getItem('i18n_lang');
+      if (saved) return saved;
+    }
+    if (typeof document !== 'undefined' && document.documentElement.lang && document.documentElement.lang !== 'zh') {
+      return document.documentElement.lang;
+    }
+    return 'zh';
+  } catch(e) { return 'zh'; }
+})();
+const _initialLang = currentLang;
 
 // 翻译数据缓存
 const messages = {
@@ -346,6 +410,17 @@ async function loadLang(lang) {
  * @param {string} lang - 目标语言 (zh, en, ja, ...)
  */
 async function initI18n(lang = 'zh') {
+  if (lang !== _initialLang) {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('i18n_lang', lang);
+    }
+    if (typeof location !== 'undefined') {
+      console.log(\`[i18n] Language mismatch (module loaded: \${_initialLang}, target: \${lang}), reloading...\`);
+      location.reload();
+      return;
+    }
+  }
+
   currentLang = lang;
   if (lang !== 'zh') {
     await loadLang(lang);
@@ -430,8 +505,30 @@ const I18N_BROWSER_TEMPLATE = `/**
  */
 
 (function(global) {
-  // 当前语言
-  let currentLang = 'zh';
+  // 立即检测语言（同步）
+  // 优先级：window.__I18N_LANG__ > URL参数lang > cookie > localStorage > html[lang] > 默认 zh
+  var currentLang = (function() {
+    try {
+      if (typeof window !== 'undefined' && window.__I18N_LANG__) return window.__I18N_LANG__;
+      if (typeof location !== 'undefined') {
+        var m = location.search.match(/[?&]lang=([^&]+)/);
+        if (m) return decodeURIComponent(m[1]);
+      }
+      if (typeof document !== 'undefined' && document.cookie) {
+        var c = document.cookie.match(/(?:^|;\\s*)i18n_lang=([^;]+)/);
+        if (c) return decodeURIComponent(c[1]);
+      }
+      if (typeof localStorage !== 'undefined') {
+        var saved = localStorage.getItem('i18n_lang');
+        if (saved) return saved;
+      }
+      if (typeof document !== 'undefined' && document.documentElement.lang && document.documentElement.lang !== 'zh') {
+        return document.documentElement.lang;
+      }
+      return 'zh';
+    } catch(e) { return 'zh'; }
+  })();
+  var _initialLang = currentLang;
 
   // 翻译数据缓存
   const messages = {
@@ -524,7 +621,14 @@ const I18N_BROWSER_TEMPLATE = `/**
    * 初始化 i18n
    */
   function initI18n(lang, callback) {
-    currentLang = lang || 'zh';
+    lang = lang || 'zh';
+    if (lang !== _initialLang) {
+      try { localStorage.setItem('i18n_lang', lang); } catch(e) {}
+      console.log('[i18n] Language mismatch (module loaded: ' + _initialLang + ', target: ' + lang + '), reloading...');
+      location.reload();
+      return;
+    }
+    currentLang = lang;
     // 设置 HTML lang 属性
     if (typeof document !== 'undefined') {
       document.documentElement.lang = currentLang;
