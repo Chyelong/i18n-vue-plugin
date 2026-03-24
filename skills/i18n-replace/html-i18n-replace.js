@@ -43,9 +43,18 @@ const ALREADY_I18N = /\$t\s*\(|i18n\.|data-i18n/;
 // HTML 中需要跳过的属性
 const SKIP_ATTRS = [
   'class', 'id', 'name', 'style', 'type', 'href', 'src', 'action',
-  'method', 'enctype', 'charset', 'rel', 'media', 'lang',
+  'method', 'enctype', 'charset', 'rel', 'media', 'lang', 'value',
   'data-i18n', 'onclick', 'onchange', 'onsubmit', 'onload'
 ];
+
+// data-* 业务属性不应标记 data-i18n（JS 通过 dataset 读取，翻译后逻辑出错）
+const SKIP_DATA_ATTR_REGEX = /^data-(?!i18n)/;
+
+// ===== 高危场景跳过规则（来自实战经验） =====
+const SWITCH_CASE_REGEX = /\bcase\s+$/;
+const BRACKET_ACCESS_REGEX = /\[\s*$/;
+const STORAGE_KEY_REGEX = /(?:localStorage\s*\.\s*(?:get|set)Item)\s*\(\s*$/;
+const INDEX_MATCH_REGEX = /\.(?:indexOf|includes)\s*\(\s*$/;
 
 // HTML void 元素（不会有文本子节点）
 const VOID_ELEMENTS = [
@@ -142,11 +151,29 @@ class HtmlI18nReplacer {
       return line.replace(CHINESE_STRING_REGEX, (match, quote, text, _endQuote) => {
         if (this.shouldSkip(text, match)) return match;
 
-        // 跳过比较运算符后的字符串
+        // 跳过比较运算符后的字符串（不跳过箭头函数 =>）
         const matchIndex = line.indexOf(match);
         const beforeMatch = line.substring(0, matchIndex);
-        if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeMatch)) {
+        if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeMatch) && !/=>\s*$/.test(beforeMatch)) {
           this.skippedLogic.push({ file: this.currentFile, text, reason: '比较运算符后的逻辑值', line: line.trim() });
+          return match;
+        }
+
+        // ===== 高危场景跳过（实战经验） =====
+        if (SWITCH_CASE_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: 'switch/case 逻辑值', line: line.trim() });
+          return match;
+        }
+        if (BRACKET_ACCESS_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: '方括号属性访问（可能是后端数据字段）', line: line.trim() });
+          return match;
+        }
+        if (STORAGE_KEY_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: '存储键（localStorage）', line: line.trim() });
+          return match;
+        }
+        if (INDEX_MATCH_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: 'indexOf/includes 匹配值（可能匹配后端数据）', line: line.trim() });
           return match;
         }
 
@@ -196,7 +223,7 @@ class HtmlI18nReplacer {
       if (HAS_CHINESE.test(trimmedExpr)) {
         trimmedExpr = trimmedExpr.replace(/(['"])((?:(?!\1).)*[\u4e00-\u9fa5]+(?:(?!\1).)*?)\1/g, (strMatch, quote, strText, offset) => {
           const beforeStr = trimmedExpr.substring(0, offset);
-          if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeStr)) return strMatch;
+          if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeStr) && !/=>\s*$/.test(beforeStr)) return strMatch;
           this.recordText(strText);
           return `window.$t(${quote}${this.escapeQuote(strText)}${quote})`;
         });
@@ -249,6 +276,7 @@ class HtmlI18nReplacer {
     result = result.replace(/([\s])(\w[\w-]*)="([^"]*[\u4e00-\u9fa5]+[^"]*)"/g, (match, prefix, attr, value) => {
       if (attr.startsWith('data-i18n') || SKIP_ATTRS.includes(attr)) return match;
       if (attr.startsWith('on')) return match; // 事件处理属性跳过
+      if (SKIP_DATA_ATTR_REGEX.test(attr)) return match; // data-* 业务属性跳过
       if (this.shouldSkip(value, match)) return match;
 
       this.recordText(value);
@@ -565,14 +593,22 @@ class HtmlI18nReplacer {
       console.log(`  ... 还有 ${texts.length - 20} 条`);
     }
 
-    // 输出因比较运算符跳过的字符串
+    // 输出跳过的高危逻辑值（按类型分组）
     if (this.skippedLogic.length > 0) {
-      console.log(`\n=== 跳过的逻辑值（${this.skippedLogic.length} 处）===`);
-      console.log('以下中文出现在比较运算符后，被判定为逻辑值而非展示文本，未替换：');
-      this.skippedLogic.forEach(s => {
-        console.log(`  [${s.file}] "${s.text}" — ${s.reason}`);
-        console.log(`    ${s.line}`);
-      });
+      console.log(`\n⚠️  跳过的高危逻辑值（${this.skippedLogic.length} 处，需人工确认是否需要翻译）：`);
+      const grouped = {};
+      for (const item of this.skippedLogic) {
+        const key = item.reason;
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(item);
+      }
+      for (const [reason, items] of Object.entries(grouped)) {
+        console.log(`  📌 ${reason}（${items.length} 处）：`);
+        for (const item of items.slice(0, 5)) {
+          console.log(`     ${item.file}: "${item.text}" → ${item.line.substring(0, 80)}`);
+        }
+        if (items.length > 5) console.log(`     ... 及其他 ${items.length - 5} 处`);
+      }
     }
   }
 }

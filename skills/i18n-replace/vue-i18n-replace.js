@@ -46,10 +46,30 @@ const ALREADY_I18N = /\$t\s*\(|[^a-zA-Z_]t\s*\(|i18n\.|this\.\$t/;
 
 // 需要跳过的属性（静态属性跳过，但指令表达式内的字符串仍需处理）
 const SKIP_ATTRS = [
-  'class', 'id', 'name', 'key', 'ref', 'v-model', 'style',
+  'class', 'id', 'name', 'key', 'ref', 'v-model', 'style', 'prop',
   'v-if', 'v-show', 'v-for', 'v-else', 'v-else-if', 'v-bind', 'v-on',
   'v-text', 'v-html', 'v-once', 'v-pre', 'v-cloak'
 ];
+
+// ===== 高危场景跳过规则（来自实战经验） =====
+
+// switch/case 语句的 case 值（通常与后端数据比较）
+const SWITCH_CASE_REGEX = /\bcase\s+$/;
+
+// 方括号属性访问（如 item.data['类型']、obj['键名']）
+const BRACKET_ACCESS_REGEX = /\[\s*$/;
+
+// 本地存储 key（habit.get/set、localStorage）
+const STORAGE_KEY_REGEX = /(?:habit\s*\.\s*(?:get|set)|localStorage\s*\.\s*(?:get|set)Item)\s*\(\s*$/;
+
+// 路由 name 参数（$router.push/replace 的 name）
+const ROUTER_NAME_REGEX = /(?:\$router\s*\.\s*(?:push|replace)\s*\(\s*\{[^}]*name\s*:\s*|showRouter\s*\(\s*)$/;
+
+// EventBus 事件名
+const EVENTBUS_REGEX = /(?:EventBus|eventBus|\$bus|\$event)\s*\.\s*\$?(?:on|emit|off|once)\s*\(\s*$/;
+
+// indexOf/includes 匹配后端数据
+const INDEX_MATCH_REGEX = /\.(?:indexOf|includes)\s*\(\s*$/;
 
 class VueI18nReplacer {
   constructor(options = {}) {
@@ -149,10 +169,9 @@ class VueI18nReplacer {
       const newCode = code.replace(/(['"`])((?:(?!\1)[\s\S])*[\u4e00-\u9fa5]+(?:(?!\1)[\s\S])*?)(\1)/g, (strMatch, quote, text, _endQuote, offset) => {
         if (ALREADY_I18N.test(text)) return strMatch;
 
-        // 跳过比较运算符后的字符串（条件判断值）
-        // 注意：只跳过比较运算符（==, ===, !=, !==, <, >, <=, >=），不跳过赋值运算符（=）
+        // 跳过比较运算符后的字符串（条件判断值），但不跳过箭头函数（=>）
         const beforeStr = code.substring(0, offset);
-        if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeStr)) {
+        if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeStr) && !/=>\s*$/.test(beforeStr)) {
           return strMatch;
         }
 
@@ -188,9 +207,9 @@ class VueI18nReplacer {
         if (ALREADY_I18N.test(literalText)) return literalMatch;
 
         // 跳过比较运算符后的字符串（条件判断值）
-        // 注意：只跳过比较运算符（==, ===, !=, !==, <, >, <=, >=），不跳过赋值运算符（=）
+        // 注意：只跳过比较运算符（==, ===, !=, !==, <, >, <=, >=），不跳过赋值运算符（=）和箭头函数（=>）
         const beforeStr = expression.substring(0, offset);
-        if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeStr)) {
+        if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeStr) && !/=>\s*$/.test(beforeStr)) {
           return literalMatch;
         }
 
@@ -377,11 +396,49 @@ class VueI18nReplacer {
 
         // 跳过比较运算符后的字符串（通常是与后端值比较的逻辑值）
         // 例如：status === '已完成' 中的 '已完成' 不应替换
-        // 注意：只跳过比较运算符（==, ===, !=, !==, <, >, <=, >=），不跳过赋值运算符（=）
+        // 注意：只跳过比较运算符（==, ===, !=, !==, <, >, <=, >=），不跳过赋值运算符（=）和箭头函数（=>）
         const matchIndex = line.indexOf(match);
         const beforeMatch = line.substring(0, matchIndex);
-        if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeMatch)) {
+        if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeMatch) && !/=>\s*$/.test(beforeMatch)) {
           this.skippedLogic.push({ file: this.currentFile, text, reason: '比较运算符后的逻辑值', line: line.trim() });
+          return match;
+        }
+
+        // ===== 高危场景跳过（实战经验） =====
+
+        // switch case 值
+        if (SWITCH_CASE_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: 'switch/case 逻辑值', line: line.trim() });
+          return match;
+        }
+
+        // 方括号属性访问 obj['中文']
+        if (BRACKET_ACCESS_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: '方括号属性访问（可能是后端数据字段）', line: line.trim() });
+          return match;
+        }
+
+        // 本地存储 key
+        if (STORAGE_KEY_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: '存储键（habit/localStorage）', line: line.trim() });
+          return match;
+        }
+
+        // 路由 name / showRouter
+        if (ROUTER_NAME_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: '路由标识符（$router name / showRouter）', line: line.trim() });
+          return match;
+        }
+
+        // EventBus 事件名
+        if (EVENTBUS_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: 'EventBus 事件名', line: line.trim() });
+          return match;
+        }
+
+        // indexOf/includes 参数
+        if (INDEX_MATCH_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: 'indexOf/includes 匹配值（可能匹配后端数据）', line: line.trim() });
           return match;
         }
 
@@ -447,8 +504,8 @@ class VueI18nReplacer {
       if (HAS_CHINESE.test(trimmedExpr)) {
         trimmedExpr = trimmedExpr.replace(/(['"])((?:(?!\1).)*[\u4e00-\u9fa5]+(?:(?!\1).)*?)\1/g, (strMatch, quote, strText, offset) => {
           const beforeStr = trimmedExpr.substring(0, offset);
-          // 跳过比较运算符后的字符串
-          if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeStr)) {
+          // 跳过比较运算符后的字符串（不跳过箭头函数 =>）
+          if (/(===?|!==?|<=?|>=?)\s*$/.test(beforeStr) && !/=>\s*$/.test(beforeStr)) {
             return strMatch;
           }
           this.recordText(strText);
@@ -783,14 +840,22 @@ class VueI18nReplacer {
       console.log(`  ... 还有 ${texts.length - 20} 条`);
     }
 
-    // 输出因比较运算符跳过的字符串
+    // 输出跳过的高危逻辑值（按类型分组）
     if (this.skippedLogic.length > 0) {
-      console.log(`\n=== 跳过的逻辑值（${this.skippedLogic.length} 处）===`);
-      console.log('以下中文出现在比较运算符后，被判定为逻辑值而非展示文本，未替换：');
-      this.skippedLogic.forEach(s => {
-        console.log(`  [${s.file}] "${s.text}" — ${s.reason}`);
-        console.log(`    ${s.line}`);
-      });
+      console.log(`\n⚠️  跳过的高危逻辑值（${this.skippedLogic.length} 处，需人工确认是否需要翻译）：`);
+      const grouped = {};
+      for (const item of this.skippedLogic) {
+        const key = item.reason;
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(item);
+      }
+      for (const [reason, items] of Object.entries(grouped)) {
+        console.log(`  📌 ${reason}（${items.length} 处）：`);
+        for (const item of items.slice(0, 5)) {
+          console.log(`     ${item.file}: "${item.text}" → ${item.line.substring(0, 80)}`);
+        }
+        if (items.length > 5) console.log(`     ... 及其他 ${items.length - 5} 处`);
+      }
     }
   }
 }

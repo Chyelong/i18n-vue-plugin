@@ -179,7 +179,8 @@ async function initI18n(lang) {
       lang = browserLang;
     }
   }
-  lang = lang || 'zh';
+  // 未传参且无其他来源时，使用模块加载时自动检测的语言（避免与 _initialLang 不匹配导致死循环刷新）
+  lang = lang || currentLang;
 
   // 如果目标语言和模块加载时检测到的语言不同，说明模块加载阶段用了错误的语言
   // 其他模块顶层的 $img() 调用结果已经是错的，需要保存后刷新页面
@@ -409,7 +410,9 @@ async function loadLang(lang) {
  * 初始化 i18n
  * @param {string} lang - 目标语言 (zh, en, ja, ...)
  */
-async function initI18n(lang = 'zh') {
+async function initI18n(lang) {
+  // 未传参时使用模块加载时自动检测的语言（避免与 _initialLang 不匹配导致死循环刷新）
+  lang = lang || currentLang;
   if (lang !== _initialLang) {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('i18n_lang', lang);
@@ -530,14 +533,33 @@ const I18N_BROWSER_TEMPLATE = `/**
   })();
   var _initialLang = currentLang;
 
+  // i18n 资源路径（相对于 HTML 页面，可通过 window.__I18N_PATH__ 自定义）
+  var I18N_BASE_PATH = (typeof window.__I18N_PATH__ === 'string') ? window.__I18N_PATH__ : './i18n/';
+  if (I18N_BASE_PATH.charAt(I18N_BASE_PATH.length - 1) !== '/') I18N_BASE_PATH += '/';
+
   // 翻译数据缓存
-  const messages = {
+  var messages = {
     zh: {},
     {{langKeys}}
   };
 
   // 支持的语言代码（防止路径遍历攻击）
-  const VALID_LANG_REGEX = /^[a-z]{2}(-[A-Z]{2})?$/;
+  var VALID_LANG_REGEX = /^[a-z]{2}(-[A-Z]{2})?$/;
+
+  // 模块加载时同步预加载翻译数据（确保后续脚本中 $t() 立即可用）
+  // 仅在非中文环境下执行，对小型静态项目可接受
+  if (currentLang !== 'zh' && VALID_LANG_REGEX.test(currentLang)) {
+    try {
+      var syncXhr = new XMLHttpRequest();
+      syncXhr.open('GET', I18N_BASE_PATH + currentLang + '.json', false);
+      syncXhr.send();
+      if (syncXhr.status === 200) {
+        messages[currentLang] = JSON.parse(syncXhr.responseText);
+      }
+    } catch(e) {
+      console.warn('[i18n] Sync preload failed for ' + currentLang + ', will retry async');
+    }
+  }
 
   // 图片 CSS 变量注册表 { varName: originalPath }
   var imgVarRegistry = {};
@@ -593,9 +615,9 @@ const I18N_BROWSER_TEMPLATE = `/**
       return;
     }
 
-    // 通过 fetch 加载 JSON 语言包
+    // 通过 XHR 加载 JSON 语言包
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', './i18n/' + lang + '.json', true);
+    xhr.open('GET', I18N_BASE_PATH + lang + '.json', true);
     xhr.onreadystatechange = function() {
       if (xhr.readyState === 4) {
         if (xhr.status === 200) {
@@ -617,7 +639,8 @@ const I18N_BROWSER_TEMPLATE = `/**
    * 初始化 i18n
    */
   function initI18n(lang, callback) {
-    lang = lang || 'zh';
+    // 未传参时使用模块加载时自动检测的语言（避免与 _initialLang 不匹配导致死循环刷新）
+    lang = lang || currentLang;
     if (lang !== _initialLang) {
       try { localStorage.setItem('i18n_lang', lang); } catch(e) {}
       console.log('[i18n] Language mismatch (module loaded: ' + _initialLang + ', target: ' + lang + '), reloading...');
@@ -658,8 +681,8 @@ const I18N_BROWSER_TEMPLATE = `/**
       return interpolate(text, params);
     }
 
-    const langData = messages[currentLang] || {};
-    const translated = langData[text];
+    var langData = messages[currentLang] || {};
+    var translated = langData[text];
 
     if (translated) {
       return interpolate(translated, params);

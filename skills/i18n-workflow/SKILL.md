@@ -46,7 +46,9 @@ digraph i18n_workflow {
     "scan" [shape=box, label="1. 检查 i18n-files 扫描报告\n不存在则自动执行 i18n-files agent"];
     "init" [shape=box, label="2. 调用 /i18n-init\n初始化 i18n 目录"];
     "replace" [shape=box, label="3. 调用替换脚本\nVue: vue-i18n-replace\nHTML/JS: html-i18n-replace"];
+    "verify" [shape=box, label="3.5. 高危验证扫描\nGrep 扫描 + 主线程修复"];
     "translate" [shape=box, label="4. 派发 i18n-text 子代理\n翻译语言包"];
+    "quality" [shape=box, label="4.5. 翻译质量检查\n变量一致性 + 空值 + JSON"];
     "review" [shape=box, label="5. 派发 i18n-code 子代理\n审核替换结果"];
     "loop" [shape=box, label="6. 审核循环\n未通过则修复后重审"];
     "pass?" [shape=diamond, label="审核通过?"];
@@ -59,8 +61,10 @@ digraph i18n_workflow {
     "detect" -> "scan";
     "scan" -> "init";
     "init" -> "replace";
-    "replace" -> "translate";
-    "translate" -> "review";
+    "replace" -> "verify";
+    "verify" -> "translate";
+    "translate" -> "quality";
+    "quality" -> "review";
     "review" -> "loop";
     "loop" -> "pass?";
     "pass?" -> "mark" [label="通过"];
@@ -75,7 +79,7 @@ digraph i18n_workflow {
 
 ## AI 执行规则
 
-> **⚠️ 严格按步骤 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 顺序执行，禁止跳过任何步骤。**
+> **⚠️ 严格按步骤 0 → 1 → 2 → 3 → 3.5 → 4 → 4.5 → 5 → 6 → 7 顺序执行，禁止跳过任何步骤。**
 > **每个步骤执行前必须在输出中标注当前步骤编号（如"【步骤 0】"），以便用户跟踪进度。**
 
 ---
@@ -196,6 +200,37 @@ node <i18n-replace-skill-directory>/html-i18n-replace.js <目标路径> --i18n-d
 - HTML/JS：JS 代码中替换为 `window.$t()`，HTML 标签添加 `data-i18n` 属性
 - 两者都会将中文 key 写入语言 JSON（翻译值留空）
 
+### 步骤 3.5：替换后高危验证扫描【不可跳过】
+
+替换脚本完成后，**必须**在主线程执行以下 Grep 扫描，自动发现并修复高危误替换：
+
+**Vue 项目扫描（使用 Grep 工具，逐条执行）：**
+
+| # | 扫描模式 | 修复方式 |
+|---|---------|---------|
+| 1 | `case.*\$t\(` 或 `case.*window\.\$t\(` | 还原 case 值为原始中文 |
+| 2 | `(===?\s*\$t|===?\s*window\.\$t)` | 还原比较值为原始中文 |
+| 3 | `(indexOf|includes)\((window\.)?\$t` | 还原匹配值 |
+| 4 | `\$router.*name.*\$t\(` | 还原路由 name 为原始中文 |
+| 5 | `(habit|localStorage).*\$t\(` | 还原存储键 |
+| 6 | `EventBus.*\$t\(` | 还原事件名 |
+| 7 | `el-tab-pane.*:name=.*\$t` | 还原 tab name，用 slot="label" 包裹翻译文本 |
+| 8 | `:prop=.*\$t\(` | 还原 prop 为原始值 |
+| 9 | `showRouter.*\$t\(` | 还原 showRouter 参数 |
+
+**静态项目扫描：**
+
+| # | 扫描模式 | 修复方式 |
+|---|---------|---------|
+| 1 | `data-i18n-value=` | 删除 data-i18n-value 属性 |
+| 2 | `type="hidden".*data-i18n` | 删除 hidden input 上的 data-i18n |
+| 3 | `data-i18n-data-` | 删除业务 data-* 的 i18n 标记 |
+
+**执行规则：**
+- 每条 Grep 有命中 → 主线程直接修复（不派发子代理）
+- 全部扫描通过（0 命中）→ 继续步骤 4
+- 修复后重新执行对应的 Grep 确认归零
+
 ### 步骤 4：翻译语言包
 
 使用 Agent 工具派发 `i18n-text` 子代理：
@@ -210,6 +245,34 @@ Agent({
 ```
 
 如有多个目标语言，为每个语言分别派发子代理，可并行执行。
+
+### 步骤 4.5：翻译质量检查【不可跳过】
+
+翻译子代理完成后，**必须**在主线程验证翻译质量：
+
+**检查项：**
+
+1. **插值变量一致性**（最严重）：读取翻译 JSON，对比每个 key-value 中的 `{xxx}` 变量集合，报告不一致的条目
+2. **空值遗漏**：检查是否还有空字符串 value 未翻译
+3. **JSON 合法性**：确认文件是合法 JSON
+
+**变量一致性检查方法**：
+
+```javascript
+// 读取翻译 JSON 后执行
+const re = /\{([^}]+)\}/g;
+const issues = [];
+for (const [key, val] of Object.entries(data)) {
+  if (typeof val !== 'string' || !val) continue;
+  const keyVars = [...key.matchAll(re)].map(m => m[1]).sort();
+  const valVars = [...val.matchAll(re)].map(m => m[1]).sort();
+  if (JSON.stringify(keyVars) !== JSON.stringify(valVars)) {
+    issues.push({ key, keyVars, valVars });
+  }
+}
+```
+
+发现问题 → 主线程直接修复翻译 JSON → 修复后重新检查 → 全部通过后继续步骤 5。
 
 ### 步骤 5：首次审核（haiku 快速审核）
 
