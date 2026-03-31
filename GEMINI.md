@@ -16,6 +16,8 @@
 
 ## 在 Gemini 中的执行约定
 
+`gemini extensions install` 会读取仓库根目录 `gemini-extension.json`，并加载 `contextFileName` 指向的本文件。
+
 1. 技能说明来源：`skills/*/SKILL.md`
 2. 子代理说明来源：`agents/*.md`
 3. 脚本执行入口：

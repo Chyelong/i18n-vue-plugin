@@ -1,0 +1,6 @@
+{
+  "name": "i18n-vue",
+  "description": "i18n automation for Vue and static HTML/JS projects: init, replace, sync, workflow, and review agents.",
+  "version": "2.2.6",
+  "contextFileName": "GEMINI.md"
+}

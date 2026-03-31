@@ -60,6 +60,19 @@ node skills/i18n-sync/sync-i18n.js ./src --i18n-dir ./src/i18n --lang en
 
 详细约定见：`GEMINI.md`
 
+也支持 Gemini 扩展安装方式（推荐）：
+
+```bash
+gemini extensions install https://github.com/Chyelong/i18n-vue-plugin.git --auto-update
+```
+
+常用管理命令：
+
+```bash
+gemini extensions update i18n-vue
+gemini extensions uninstall i18n-vue
+```
+
 ---
 
 ### 3) Codex 安装（仓库方式）
@@ -90,6 +103,49 @@ node skills/i18n-sync/sync-i18n.js ./src --i18n-dir ./src/i18n --lang en
 Fetch and follow instructions from https://raw.githubusercontent.com/Chyelong/i18n-vue-plugin/refs/heads/main/.codex/INSTALL.md
 ```
 
+## 安装后更新方式
+
+### Claude CLI（插件）
+
+```bash
+/plugin update i18n-vue
+```
+
+如果是本地 `--plugin-dir` 调试方式，先拉代码再重载：
+
+```bash
+git pull
+/reload-plugins
+```
+
+### Gemini CLI（扩展）
+
+手动更新：
+
+```bash
+gemini extensions update i18n-vue
+```
+
+如果安装时使用了 `--auto-update`，会按 Gemini 的机制自动更新：
+
+```bash
+gemini extensions install https://github.com/Chyelong/i18n-vue-plugin.git --auto-update
+```
+
+### Codex（仓库技能）
+
+更新本地仓库：
+
+```bash
+cd ~/.codex/i18n-vue-plugin && git pull
+```
+
+如果你是用远程安装说明模式，也可以重新执行一次：
+
+```text
+Fetch and follow instructions from https://raw.githubusercontent.com/Chyelong/i18n-vue-plugin/refs/heads/main/.codex/INSTALL.md
+```
+
 ## 本地开发调试（Claude 插件）
 
 修改后可在 Claude 会话中执行：
@@ -102,6 +158,7 @@ Fetch and follow instructions from https://raw.githubusercontent.com/Chyelong/i1
 
 - `plugin.json` 中 `name`、`version`、`description` 已填写
 - `marketplace.json` 已包含 `name`、`owner`、`plugins`
+- `gemini-extension.json` 已存在且版本号已更新
 - `GEMINI.md` 已说明 Gemini 使用方式
 - `CODEX.md` 已说明 Codex 使用方式
 - `skills/*/SKILL.md` 与 `agents/*.md` 可正常读取
