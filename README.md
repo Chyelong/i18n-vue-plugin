@@ -84,6 +84,12 @@ node skills/i18n-sync/sync-i18n.js ./src --i18n-dir ./src/i18n --lang en
 
 详细约定见：`CODEX.md`
 
+也支持 Codex 的远程安装说明模式（Fetch and follow）：
+
+```text
+Fetch and follow instructions from https://raw.githubusercontent.com/Chyelong/i18n-vue-plugin/refs/heads/main/.codex/INSTALL.md
+```
+
 ## 本地开发调试（Claude 插件）
 
 修改后可在 Claude 会话中执行：
