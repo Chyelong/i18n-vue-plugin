@@ -57,15 +57,13 @@ node <skill-directory>/sync-i18n.js <目标路径> --i18n-dir <i18n-dir> --lang 
 
 ### 步骤 2：调用 i18n-text agent 子代理翻译
 
-脚本执行完成后，**必须**使用 Agent 工具派发 `i18n-text` 子代理进行翻译：
+脚本执行完成后，**必须**派发 `i18n-text` 子代理进行翻译：
 
 ```
-Agent({
-  subagent_type: "i18n-text",
-  description: "翻译 i18n JSON",
-  model: "haiku",
-  prompt: "读取 <i18n-dir>/<lang>.json，将所有值为空字符串的条目翻译为<目标语言>。中文 key 是源文本，翻译要准确自然，符合 UI 用语习惯。翻译完成后直接写回文件。"
-})
+subagent: i18n-text
+model: haiku
+task: 翻译 i18n JSON
+prompt: 读取 <i18n-dir>/<lang>.json，将所有值为空字符串的条目翻译为<目标语言>。中文 key 是源文本，翻译要准确自然，符合 UI 用语习惯。翻译完成后直接写回文件。
 ```
 
 ## 工作流程

@@ -130,12 +130,10 @@ digraph i18n_workflow {
 **必须**派发 `i18n-files` 子代理扫描项目并生成报告，不可跳过：
 
 ```
-Agent({
-  subagent_type: "i18n-files",
-  description: "扫描 i18n 进度",
-  model: "haiku",
-  prompt: "扫描项目，生成全项目 i18n 完成状态文件树和分块任务文档。将文件树写入 <i18n-dir>/i18n-files-tree.md，任务清单写入 <i18n-dir>/i18n-tasks.md。i18n 目录路径为 <i18n-dir>。"
-})
+subagent: i18n-files
+model: haiku
+task: 扫描 i18n 进度
+prompt: 扫描项目，生成全项目 i18n 完成状态文件树和分块任务文档。将文件树写入 <i18n-dir>/i18n-files-tree.md，任务清单写入 <i18n-dir>/i18n-tasks.md。i18n 目录路径为 <i18n-dir>。
 ```
 
 子代理完成后：
@@ -233,15 +231,13 @@ node <i18n-replace-skill-directory>/html-i18n-replace.js <目标路径> --i18n-d
 
 ### 步骤 4：翻译语言包
 
-使用 Agent 工具派发 `i18n-text` 子代理：
+派发 `i18n-text` 子代理：
 
 ```
-Agent({
-  subagent_type: "i18n-text",
-  description: "翻译 i18n JSON",
-  model: "haiku",
-  prompt: "读取 <i18n-dir>/<lang>.json，将所有值为空字符串的条目翻译为<目标语言>。这是一个<type>项目的 UI 界面翻译，中文 key 是源文本。翻译要求：准确、简洁、符合 UI 场景（按钮用祈使语气、标签用名词、提示信息用完整句子）。保留插值变量 {xxx}、HTML 标签和转义符不变。翻译完成后直接写回文件。"
-})
+subagent: i18n-text
+model: haiku
+task: 翻译 i18n JSON
+prompt: 读取 <i18n-dir>/<lang>.json，将所有值为空字符串的条目翻译为<目标语言>。这是一个<type>项目的 UI 界面翻译，中文 key 是源文本。翻译要求：准确、简洁、符合 UI 场景（按钮用祈使语气、标签用名词、提示信息用完整句子）。保留插值变量 {xxx}、HTML 标签和转义符不变。翻译完成后直接写回文件。
 ```
 
 如有多个目标语言，为每个语言分别派发子代理，可并行执行。
@@ -276,15 +272,13 @@ for (const [key, val] of Object.entries(data)) {
 
 ### 步骤 5：首次审核（haiku 快速审核）
 
-使用 Agent 工具派发 `i18n-code` 子代理，首次审核使用 **haiku 模型**快速扫描：
+派发 `i18n-code` 子代理，首次审核使用 **haiku 模型**快速扫描：
 
 ```
-Agent({
-  subagent_type: "i18n-code",
-  description: "审核 i18n 替换",
-  model: "haiku",
-  prompt: "对比 <目标路径> 下文件国际化前后的逻辑差异，判断 i18n 替换是否改变了原有代码逻辑。项目类型为 <type>。重点检查：1）比较运算符/switch/case 中的字符串是否被误替换；2）对象 key、API 参数、路由标识是否被替换；3）data-i18n 值与文本是否一致（HTML 项目）；4）代码结构是否被意外修改（属性丢失等）。返回审核结果：通过/未通过，以及具体问题列表。"
-})
+subagent: i18n-code
+model: haiku
+task: 审核 i18n 替换
+prompt: 对比 <目标路径> 下文件国际化前后的逻辑差异，判断 i18n 替换是否改变了原有代码逻辑。项目类型为 <type>。重点检查：1）比较运算符/switch/case 中的字符串是否被误替换；2）对象 key、API 参数、路由标识是否被替换；3）data-i18n 值与文本是否一致（HTML 项目）；4）代码结构是否被意外修改（属性丢失等）。返回审核结果：通过/未通过，以及具体问题列表。
 ```
 
 ### 步骤 6：审核循环
@@ -303,11 +297,9 @@ Agent({
 **二次审核模型规则**：修复后的重新审核**不指定 model 参数**，继承主线程模型，确保更高质量的审核：
 
 ```
-Agent({
-  subagent_type: "i18n-code",
-  description: "二次审核 i18n 替换",
-  prompt: "对比 <目标路径> 下文件国际化前后的逻辑差异，判断 i18n 替换是否改变了原有代码逻辑。项目类型为 <type>。这是修复后的二次审核，请：1）逐条验证之前报告的问题是否已正确修复；2）检查修复是否引入了新问题；3）重点检查比较运算符、对象 key、API 参数、路由标识等逻辑值是否被误替换。返回审核结果：通过/未通过，以及具体问题列表。"
-})
+subagent: i18n-code
+task: 二次审核 i18n 替换
+prompt: 对比 <目标路径> 下文件国际化前后的逻辑差异，判断 i18n 替换是否改变了原有代码逻辑。项目类型为 <type>。这是修复后的二次审核，请：1）逐条验证之前报告的问题是否已正确修复；2）检查修复是否引入了新问题；3）重点检查比较运算符、对象 key、API 参数、路由标识等逻辑值是否被误替换。返回审核结果：通过/未通过，以及具体问题列表。
 ```
 
 ---
