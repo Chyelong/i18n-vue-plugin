@@ -216,8 +216,8 @@ class VueI18nReplacer {
 
         this.recordText(literalText);
         hasChange = true;
-        // 包裹：'你好' -> $t('你好') (template 中不能用 window)
-        return `$t(${quote}${this.escapeQuote(literalText)}${quote})`;
+        // 始终用单引号包裹，避免 Vue 2 buble 编译器 \" 转义问题
+        return `$t('${this.escapeQuote(literalText)}')`;
       });
 
       if (hasChange) {
@@ -443,10 +443,14 @@ class VueI18nReplacer {
           return match;
         }
 
-        // 检查是否在模板字符串中有变量
-        // script 中：有 this. 时用 $t()，否则用 window.$t()
-        const useWindow = !line.includes('this.');
-        const prefix = useWindow ? 'window.' : '';
+        // 数据映射字典值 — 仅记录警告，不跳过替换
+        if (/^\s*\d+\s*:\s*$/.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: '⚠️ 疑似数据映射字典值（数值键→中文值，需人工确认）', line: line.trim() });
+        }
+
+        // script 区域始终使用 window.$t()
+        // template 区域的 $t() 由 processTemplate 方法处理（不经过此函数）
+        const prefix = 'window.';
 
         // 处理包含 HTML 标签的字符串，如 '<b class="c_type">台桌</b>'
         // 只替换标签之间的中文文本，保留 HTML 结构
@@ -472,7 +476,7 @@ class VueI18nReplacer {
 
         // 检查是否在模板字符串中有变量（模板字符串由 processTemplateString 负责 recordText）
         if (quote === '`' && /\$\{/.test(text)) {
-          return this.processTemplateString(match, text, useWindow);
+          return this.processTemplateString(match, text, true);
         }
 
         this.recordText(text);
@@ -633,7 +637,7 @@ class VueI18nReplacer {
         continue;
       }
 
-      if (stats.isDirectory() && !file.startsWith('.') && file !== 'node_modules' && file !== 'dist' && file !== 'build') {
+      if (stats.isDirectory() && !file.startsWith('.') && file !== 'node_modules' && file !== 'dist' && file !== 'build' && file !== 'vendor' && file !== 'lib' && file !== 'third-party') {
         // 检查排除模式
         if (this.exclude.some(pattern => file === pattern || fullPath.includes(pattern))) continue;
         await this.processDirectory(fullPath);

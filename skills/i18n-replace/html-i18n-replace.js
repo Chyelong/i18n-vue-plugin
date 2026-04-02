@@ -299,6 +299,8 @@ class HtmlI18nReplacer {
       // 包含引号或已被 i18n 处理
       if (ALREADY_I18N.test(text)) return match;
       if (text.includes('"') || text.includes("'")) return match;
+      // 含 Vue 插值 {{}} 的文本不能用 data-i18n（applyI18n 会覆盖 Vue 动态渲染）
+      if (/\{\{.*?\}\}/.test(text)) return match;
 
       this.recordText(trimmed);
 
@@ -391,11 +393,13 @@ class HtmlI18nReplacer {
 
       if (stats.isSymbolicLink()) continue;
 
-      if (stats.isDirectory() && !file.startsWith('.') && file !== 'node_modules' && file !== 'dist' && file !== 'build') {
+      if (stats.isDirectory() && !file.startsWith('.') && file !== 'node_modules' && file !== 'dist' && file !== 'build' && file !== 'vendor' && file !== 'lib' && file !== 'third-party') {
         if (this.exclude.some(pattern => file === pattern || fullPath.includes(pattern))) continue;
         await this.processDirectory(fullPath);
       } else {
         if (this.exclude.some(pattern => file === pattern || fullPath.includes(pattern))) continue;
+        // 第三方压缩文件自动跳过（实战经验：bestime.min.js 被误改导致页面崩溃）
+        if (file.endsWith('.min.js') || file.endsWith('.min.css')) continue;
         const ext = path.extname(file).toLowerCase();
         if (HTML_EXTS.includes(ext) || JS_EXTS.includes(ext)) {
           await this.processFile(fullPath);
