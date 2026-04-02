@@ -3,7 +3,7 @@ name: i18n-files
 model: haiku
 description: |
   扫描项目文件，生成文件树并标记 i18n 完成状态，输出未完成文件的分块任务文档。
-  支持 Vue 项目（.vue/.js）和静态 HTML/JS 项目（.html/.js/.ts）。
+  支持 Vue 项目（.vue/.js）、静态 HTML/JS 项目（.html/.js/.ts）和微信小程序（.wxml/.js）。
   当用户说"扫描i18n进度"、"i18n文件扫描"、"检查i18n完成情况"、"生成i18n任务"时触发。
 tools: Read, Write, Glob, Grep
 ---
@@ -18,7 +18,7 @@ tools: Read, Write, Glob, Grep
 
 > **本代理仅执行扫描和分析，严禁修改任何业务代码。**
 >
-> - ❌ 不修改任何 .vue / .js / .ts / .html 业务文件
+> - ❌ 不修改任何 .vue / .js / .ts / .html / .wxml 业务文件
 > - ❌ 不使用 Edit / Bash 工具
 > - ✅ 只读取、分析业务文件
 > - ✅ 使用 Write 工具将扫描结果写入 i18n 目录下的 MD 文件
@@ -46,9 +46,11 @@ tools: Read, Write, Glob, Grep
 1. **项目根目录**：从 `<i18n-dir>` 向上查找，找到包含 `package.json` 或 `.html` 文件的目录即为项目根目录
 2. **项目类型判断**：
    - 项目根目录有 `package.json` 且依赖包含 `vue` → **Vue 项目**
+   - 项目根目录有 `app.json` 且 `package.json` 中无 `vue` 依赖 → **微信小程序**（wx）
    - 否则 → **静态 HTML/JS 项目**
 3. **扫描范围**：
    - **Vue 项目**：`<项目根目录>/src/`（如果 src 不存在，扫描项目根目录）
+   - **微信小程序**：`<项目根目录>/`（整个项目根目录，`.wxs` 文件识别但不处理 i18n）
    - **静态项目**：`<项目根目录>/`（整个项目根目录）
 
 **示例**：
@@ -62,6 +64,11 @@ tools: Read, Write, Glob, Grep
 **Vue 项目扫描**：
 - `<扫描范围>/**/*.vue`
 - `<扫描范围>/**/*.js`（排除 node_modules、dist、i18n 目录本身、*.config.js、*.min.js）
+
+**微信小程序扫描**：
+- `<扫描范围>/**/*.wxml`
+- `<扫描范围>/**/*.js`（排除 node_modules、dist、i18n 目录本身、*.config.js、*.min.js）
+- 注意：`.wxs` 文件识别但不处理 i18n（不扫描中文替换状态）
 
 **静态项目扫描**：
 - `<扫描范围>/**/*.html`
@@ -93,6 +100,16 @@ tools: Read, Write, Glob, Grep
 **未完成 i18n**（满足任一）：
 1. 存在未被 `$t()` / `window.$t()` 包裹的中文字符串
 2. 完全没有 `$t(` 调用但存在中文
+
+#### WXML 文件（.wxml）判定
+
+**已完成 i18n**（同时满足）：
+1. 文件中的中文文本已被 `{{$t['...']}}` 包裹
+2. 文件中**没有**未被 `$t` 包裹的裸中文
+
+**未完成 i18n**（满足任一）：
+1. 存在未被 `{{$t['...']}}` 包裹的中文文本
+2. 完全没有 `$t` 引用但存在中文
 
 #### HTML 文件（.html/.htm）判定
 
@@ -212,7 +229,7 @@ tools: Read, Write, Glob, Grep
 - 构建产物：`node_modules/`、`dist/`、`build/`
 - i18n 目录本身
 
-**除以上之外，扫描范围内的所有 .vue / .js / .ts / .html / .htm 文件都必须扫描。**
+**除以上之外，扫描范围内的所有 .vue / .js / .ts / .html / .htm / .wxml 文件都必须扫描。**（`.wxs` 文件识别但不处理 i18n）
 
 ### 分组规则
 
