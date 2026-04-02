@@ -23,6 +23,7 @@ description: 自动替换代码中的中文为 i18n 标记。支持 Vue（$t）�
 支持两种项目类型：
 - **Vue 项目**：`.vue` 文件 → `$t()` / `{{ $t() }}`
 - **静态 HTML/JS 项目**：`.html`/`.js`/`.ts` 文件 → `window.$t()` / `data-i18n` 属性
+- **微信小程序**：`.wxml`/`.js` 文件 → `global.$t()` / `{{$t['key']}}`，自动注入 Behavior
 
 ## 用法
 
@@ -78,6 +79,19 @@ node <skill-directory>/html-i18n-replace.js <目标路径> --i18n-dir <i18n-dir>
 | HTML 标签文本 `<div>中文</div>` | → `<div data-i18n="中文">中文</div>` |
 | HTML 属性 `placeholder="请输入"` | → `placeholder="请输入" data-i18n-placeholder="请输入"` |
 | `<script>` 内的 JS 代码 | 同 JS 字符串处理 |
+
+### 微信小程序替换规则
+
+| 场景 | 替换前 | 替换后 |
+|------|--------|--------|
+| WXML 文本 | `<text>中文</text>` | `<text>{{$t['中文']}}</text>` |
+| WXML 属性 | `placeholder="中文"` | `placeholder="{{$t['中文']}}"` |
+| JS 代码 | `'中文'` | `global.$t('中文')` |
+
+使用方式：
+```bash
+node skills/i18n-replace/wx-i18n-replace.js ./pages --i18n-dir ./i18n --lang tw
+```
 
 ## 跳过的场景
 
