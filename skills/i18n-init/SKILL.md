@@ -141,3 +141,58 @@ i18n/
 ├── index.js    # 核心模块（$t 函数、语言切换、applyI18n）
 └── en.json     # 翻译文件（由替换脚本填充）
 ```
+
+## $img 图片国际化注意事项
+
+### webpack require() + hash 不兼容
+
+Vue 项目中 `<img :src="$img(require('../assets/bg.png'))">` **无法工作**：
+- `require()` 经 webpack 处理后路径变为 `/static/img/bg.a1b2c3d4.png`（带 hash）
+- `$img` 拼接 `_tw` 后缀 → `/static/img/bg.a1b2c3d4_tw.png` → 文件不存在
+
+**正确做法**：把多语言图片放到 `static/` 目录（不经 webpack 处理），用绝对路径：
+```html
+<img :src="$img('/static/img/bg.png')" />
+```
+
+### $img 与 $imgVar 路径基准不同
+
+| 函数 | 路径基准 | 示例 |
+|------|---------|------|
+| `$img(path)` | 相对于 HTML 页面 | `$img('img/nav/01.png')` |
+| `$imgVar(name, path)` | 相对于 CSS 文件 | `$imgVar('--nav', '../img/nav/01.png')` |
+
+## initI18n 异步加载 + 首屏翻译方案
+
+当 initI18n 在 mounted 中调用（非模块顶层）且语言由后端接口返回时：
+
+1. data() 中的 $t() 因翻译数据未加载而返回原文
+2. 模板首次渲染时翻译同样为空
+3. $t 非 Vue 响应式，数据加载后不自动重渲染
+
+**解决方案（langKey 强制重建）：**
+
+```javascript
+new Vue({
+  data: { langKey: 0 },
+  template: '<App :key="langKey"/>',
+  mounted: async function() {
+    $.ajax({ url: '/index/info', async: false, success(res) {
+      window.$language = res.data.language || 'zh';
+    }});
+    await initI18n(window.$language);
+    this.langKey++; // key 变化 → 整棵组件树销毁重建
+  }
+});
+```
+
+**适用场景**：initI18n 在 mounted 中调用、语言由后端接口返回、使用 `await import()` 动态加载语言包。
+
+## Vue 2 必要挂载
+
+```javascript
+import { $t, $img } from './i18n'
+Vue.prototype.$t = $t      // 模板中 $t() 可用
+Vue.prototype.$img = $img  // 模板中 $img() 可用
+// window.$t 是给 script 区域用的，template 走 Vue 实例查找链
+```

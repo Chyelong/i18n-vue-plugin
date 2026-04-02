@@ -306,6 +306,11 @@ if (typeof window !== 'undefined') {
   window.initI18n = initI18n;
 }
 
+// Vue 2 自动挂载（import Vue 后 Vue 即在作用域内）
+import Vue from 'vue'
+Vue.prototype.$t = $t
+Vue.prototype.$img = $img
+
 export { $t, $img, $imgVar, initI18n, setLang, getLang, getSupportedLangs, onLangChange, messages, SUPPORTED_LANGS };
 export default { $t, $img, $imgVar, initI18n, setLang, getLang, getSupportedLangs, onLangChange };
 `;
