@@ -35,7 +35,7 @@ description: Use when 用户要求对项目进行完整国际化。触发词：�
 | 目标路径 | 要扫描的目录或文件 | 自动（vue: ./src，browser: ./） |
 | --langs | 目标语言，逗号分隔 | tw |
 | --i18n-dir | i18n 目录路径 | 自动（vue: ./src/i18n，browser: ./i18n） |
-| --type | 项目类型: vue, browser | 自动检测 |
+| --type | 项目类型: vue, browser, wx | 自动检测 |
 
 ## 工作流程
 
@@ -94,6 +94,7 @@ digraph i18n_workflow {
 2. 否则自动检测：
    - 在项目根目录查找 `package.json`
    - 如果存在且 `dependencies` 或 `devDependencies` 中包含 `vue` → **Vue 项目**
+   - 如果存在 `app.json` 且 `package.json` 中无 `vue` 依赖 → **微信小程序**（wx）
    - 否则 → **静态 HTML/JS 项目**
 
 #### 确定配置
@@ -221,10 +222,16 @@ node <i18n-replace-skill-directory>/vue-i18n-replace.js <目标路径> --i18n-di
 node <i18n-replace-skill-directory>/html-i18n-replace.js <目标路径> --i18n-dir <i18n-dir> --lang <lang>
 ```
 
+**微信小程序（wx）**：调用 `wx-i18n-replace.js` 替换中文 + 自动注入 Behavior
+```bash
+node <i18n-replace-skill-directory>/wx-i18n-replace.js <目标路径> --i18n-dir <i18n-dir> --lang <lang>
+```
+
 脚本会：
 - Vue：替换中文为 `$t()` / `{{ $t() }}`
 - HTML/JS：JS 代码中替换为 `window.$t()`，HTML 标签添加 `data-i18n` 属性
-- 两者都会将中文 key 写入语言 JSON（翻译值留空）
+- wx：WXML 中替换为 `{{$t['key']}}`，JS 中替换为 `global.$t()`，自动注入 i18n Behavior
+- 所有类型都会将中文 key 写入语言 JSON（翻译值留空）
 
 ### 步骤 3.5：替换后高危验证扫描【不可跳过】
 
