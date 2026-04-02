@@ -71,6 +71,9 @@ const EVENTBUS_REGEX = /(?:EventBus|eventBus|\$bus|\$event)\s*\.\s*\$?(?:on|emit
 // indexOf/includes 匹配后端数据
 const INDEX_MATCH_REGEX = /\.(?:indexOf|includes)\s*\(\s*$/;
 
+// el-table-column 的 prop 属性（数据路径，不应翻译）
+const TABLE_PROP_REGEX = /el-table-column/;
+
 class VueI18nReplacer {
   constructor(options = {}) {
     this.dryRun = options.dryRun || false;
@@ -195,6 +198,8 @@ class VueI18nReplacer {
     result = result.replace(DYNAMIC_ATTR_REGEX, (match, attr, expression) => {
       // 跳过特定属性
       if (SKIP_ATTRS.includes(attr)) return match;
+      // el-table-column 的 prop/sort-by 属性是数据路径，不应翻译
+      if ((attr === 'prop' || attr === 'sort-by') && TABLE_PROP_REGEX.test(match)) return match;
       // 已经被 i18n 包裹
       if (ALREADY_I18N.test(expression)) return match;
 
