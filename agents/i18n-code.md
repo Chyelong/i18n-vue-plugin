@@ -79,6 +79,17 @@ tools: Read, Glob, Grep
 | 4 | option value 标记 | `<option.*data-i18n-value` | 下拉选项提交值 |
 | 5 | querySelector 中文 | `querySelector.*\$t\(` | 选择器失效 |
 
+**微信小程序必扫（6 项）：**
+
+| # | 扫描目标 | Grep 模式 | 危险原因 |
+|---|---------|-----------|---------|
+| 1 | switch case | `case.*global\.\$t\(` | case 值来自后端，翻译后匹配失败 |
+| 2 | 等值比较 | `(===?\s*global\.\$t\|!==?\s*global\.\$t)` | 与后端数据比较，翻译后永远不等 |
+| 3 | indexOf/includes | `(indexOf\|includes)\(global\.\$t` | 匹配后端响应内容 |
+| 4 | wx 存储键 | `wx\.(set\|get\|remove)Storage.*global\.\$t\(` | 持久化键翻译后读不到旧数据 |
+| 5 | 方括号访问 | `\[.*global\.\$t\(` 结合上下文判断 | 后端数据字段访问 |
+| 6 | navigateTo/redirectTo | `wx\.(navigateTo\|redirectTo).*global\.\$t\(` | URL/路由参数不能翻译 |
+
 对每条 Grep 命中结果，按"对比判断规则"逐条判断是 ✅ 安全还是 ❌ 危险。
 
 ### 新增高危审核模式（实战经验 v2.3）

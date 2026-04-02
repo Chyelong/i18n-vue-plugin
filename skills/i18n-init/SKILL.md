@@ -34,7 +34,7 @@ description: 初始化项目 i18n 目录。触发词：i18n初始化、国际化
 |------|------|--------|
 | 目标路径 | i18n 目录路径 | vue: ./src/i18n, browser: ./i18n |
 | --langs | 目标语言，逗号分隔 | tw |
-| --type | 输出类型: vue, browser, esm | vue |
+| --type | 输出类型: vue, browser, esm, wx | vue |
 
 ## 类型说明
 
@@ -43,6 +43,7 @@ description: 初始化项目 i18n 目录。触发词：i18n初始化、国际化
 | vue | Vue 项目 | `this.$t()` / `window.$t()` |
 | browser | 静态 HTML/JS 项目 | `window.$t()` + `data-i18n` 属性 |
 | esm | ESM 模块项目 | `import { $t } from './i18n'` |
+| wx | 微信小程序 | `global.$t()` + `{{$t['key']}}` |
 
 ## AI 执行规则
 
@@ -51,6 +52,7 @@ description: 初始化项目 i18n 目录。触发词：i18n初始化、国际化
 检查项目根目录的特征文件，自动判断类型：
 
 - **存在 `package.json` 且依赖包含 `vue`** → `--type vue`，默认路径 `./src/i18n`
+- **存在 `app.json` 且无 `vue` 依赖** → `--type wx`，默认路径 `./i18n`
 - **否则** → `--type browser`，默认路径 `./i18n`（项目根目录下）
 
 ### 2. 执行初始化脚本
@@ -123,6 +125,22 @@ initI18n();
 ```
 
 **注意**：`applyI18n()` 会遍历 DOM 中所有带 `data-i18n` / `data-i18n-{attr}` 标记的元素，替换文本内容和属性值。切换语言后需重新调用。
+
+#### 微信小程序（--type wx）
+
+init 脚本生成 `i18n.js`（非 `index.js`）+ `i18n-behavior.js`。在 `app.js` 顶部添加：
+
+```javascript
+require('./i18n/i18n.js')
+```
+
+开发阶段默认使用本地 `tw.json`，上线时在 `onLaunch` 中调用：
+
+```javascript
+await global.loadRemoteLocale('https://your-api.com/i18n/tw.json', 'tw')
+```
+
+Behavior 由替换脚本 `wx-i18n-replace.js` 自动注入到各页面/组件。
 
 #### ESM 项目（--type esm）
 

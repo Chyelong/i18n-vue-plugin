@@ -101,14 +101,15 @@ digraph i18n_workflow {
 
 检测完成后，确定本次工作流的全局配置：
 
-| 配置项 | Vue 项目 | 静态 HTML/JS 项目 |
-|--------|---------|------------------|
-| type | `vue` | `browser` |
-| 默认目标路径 | `./src` | `./`（项目根目录） |
-| 默认 i18n 目录 | `./src/i18n` | `./i18n` |
-| 替换脚本 | `vue-i18n-replace.js` | `html-i18n-replace.js` |
-| 扫描文件类型 | `.vue` `.js` | `.html` `.htm` `.js` `.ts` |
-| i18n 标记方式 | `$t()` / `{{ $t() }}` | `window.$t()` / `data-i18n` |
+| 配置项 | Vue 项目 | 静态 HTML/JS 项目 | 微信小程序 |
+|--------|---------|------------------|-----------|
+| type | `vue` | `browser` | `wx` |
+| 默认目标路径 | `./src` | `./`（项目根目录） | `./`（项目根目录） |
+| 默认 i18n 目录 | `./src/i18n` | `./i18n` | `./i18n` |
+| 替换脚本 | `vue-i18n-replace.js` | `html-i18n-replace.js` | `wx-i18n-replace.js` |
+| 扫描文件类型 | `.vue` `.js` | `.html` `.htm` `.js` `.ts` | `.wxml` `.js` |
+| i18n 标记方式 | `$t()` / `{{ $t() }}` | `window.$t()` / `data-i18n` | `global.$t()` / `{{$t['key']}}` |
+| 核心文件名 | `index.js` | `index.js` | `i18n.js` |
 
 **输出**：向用户展示检测结果和配置，确认后继续。
 
@@ -173,9 +174,11 @@ prompt: 扫描项目，生成全项目 i18n 完成状态文件树和分块任务
 
 ### 步骤 2：初始化 i18n 目录
 
-检查 i18n 目录是否已有 `index.js`（或 `index.ts`）和语言 JSON 文件。
+检查 i18n 目录是否已有核心文件和语言 JSON 文件。
+- Vue/browser/esm：检查 `index.js`（或 `index.ts`）
+- wx（微信小程序）：检查 `i18n.js`
 
-- **已有完整配置**（index.js + 目标语言.json 都存在）→ 跳过此步骤（zh.json 不要求，源语言即中文）
+- **已有完整配置**（核心文件 + 目标语言.json 都存在）→ 跳过此步骤（zh.json 不要求，源语言即中文）
 - **缺少任一文件** → 调用 `/i18n-init` skill：
 
 ```bash
@@ -201,6 +204,17 @@ Vue.prototype.$t = $t
     applyI18n();
   });
 </script>
+```
+
+**微信小程序（wx）**：init 脚本自动生成 `i18n.js` + `i18n-behavior.js`，需在 `app.js` 顶部添加：
+```javascript
+require('./i18n/i18n.js')
+```
+
+`app.js` 的 `onLaunch` 中插入（注释状态，上线时取消注释改 URL）：
+```javascript
+// [i18n] 上线时取消注释并修改为云端地址
+// await global.loadRemoteLocale('https://your-api.com/i18n/tw.json', 'tw')
 ```
 
 **初始化后必检（静态项目）：**
