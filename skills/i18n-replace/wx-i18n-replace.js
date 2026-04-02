@@ -38,7 +38,7 @@ const HAS_CHINESE = /[\u4e00-\u9fa5]/;
 const CHINESE_STRING_REGEX = /(['"`])((?:(?!\1).)*[\u4e00-\u9fa5]+(?:(?!\1).)*?)(\1)/g;
 
 // 已经被 i18n 包裹的模式（跳过）
-const ALREADY_I18N = /\$t\s*[\[(]|global\.\$t/;
+const ALREADY_I18N = /\$t\s*[\[(']|global\.\$t/;
 
 // WXML 中需要跳过的属性
 const SKIP_ATTRS = [
@@ -116,6 +116,7 @@ class WxI18nReplacer {
    * 检查属性是否应该跳过
    */
   isSkipAttr(attr) {
+    if (attr === 'data-i18n') return false;
     if (SKIP_ATTRS.includes(attr)) return true;
     for (const prefix of SKIP_ATTR_PREFIXES) {
       if (attr.startsWith(prefix)) return true;
@@ -215,7 +216,7 @@ class WxI18nReplacer {
     });
 
     // 第二步：处理静态属性中的中文 attr="中文" → attr="{{$t['中文']}}"
-    result = result.replace(/([\s])(\w[\w-]*)="([^"]*[\u4e00-\u9fa5]+[^"]*)"/g, (match, prefix, attr, value) => {
+    result = result.replace(/([\s<])(\w[\w-]*)="([^"]*[\u4e00-\u9fa5]+[^"]*)"/g, (match, prefix, attr, value) => {
       if (this.isSkipAttr(attr)) return match;
       if (this.shouldSkip(value, match)) return match;
 
@@ -397,15 +398,19 @@ class WxI18nReplacer {
   // ==================== Behavior 注入 ====================
 
   /**
-   * 为有 WXML 替换的页面/组件注入 i18nBehavior
+   * 为有 WXML 替换的页面/组件注入 i18nBehavior（纯函数）
+   * @param {string} jsContent - JS 文件内容
+   * @param {string} jsFilePath - JS 文件路径（用于计算相对路径）
+   * @returns {string} 修改后的内容，如果无需修改则返回原内容
    */
-  injectBehavior(jsFilePath) {
-    if (!fs.existsSync(jsFilePath)) return;
-
-    let content = fs.readFileSync(jsFilePath, 'utf-8');
-
+  injectBehavior(jsContent, jsFilePath) {
     // 已经注入过则跳过
-    if (/i18nBehavior/.test(content)) return;
+    if (/i18nBehavior/.test(jsContent)) return jsContent;
+
+    // 不是 Page 或 Component，跳过
+    const isPage = /\bPage\s*\(\s*\{/.test(jsContent);
+    const isComponent = /\bComponent\s*\(\s*\{/.test(jsContent);
+    if (!isPage && !isComponent) return jsContent;
 
     // 计算 i18n-behavior.js 的相对路径
     const jsDir = path.dirname(jsFilePath);
@@ -419,37 +424,21 @@ class WxI18nReplacer {
 
     // 在文件顶部添加 require
     const requireLine = `const i18nBehavior = require('${relativePath}')\n`;
+    let content = requireLine + jsContent;
 
-    // 查找 Page({ 或 Component({ 并注入 behaviors
-    if (/\bPage\s*\(\s*\{/.test(content)) {
-      content = requireLine + content;
-      // 检查是否已有 behaviors 数组
-      if (/behaviors\s*:\s*\[/.test(content)) {
-        // 追加到已有 behaviors 数组
-        content = content.replace(/behaviors\s*:\s*\[/, 'behaviors: [i18nBehavior, ');
-      } else {
-        // 在 Page({ 后插入 behaviors
-        content = content.replace(/\bPage\s*\(\s*\{/, 'Page({\n  behaviors: [i18nBehavior],');
-      }
-    } else if (/\bComponent\s*\(\s*\{/.test(content)) {
-      content = requireLine + content;
-      if (/behaviors\s*:\s*\[/.test(content)) {
-        content = content.replace(/behaviors\s*:\s*\[/, 'behaviors: [i18nBehavior, ');
-      } else {
-        content = content.replace(/\bComponent\s*\(\s*\{/, 'Component({\n  behaviors: [i18nBehavior],');
-      }
+    // 检查是否已有 behaviors 数组
+    if (/behaviors\s*:\s*\[/.test(jsContent)) {
+      // 追加到已有 behaviors 数组
+      content = content.replace(/behaviors\s*:\s*\[/, 'behaviors: [i18nBehavior, ');
+    } else if (isPage) {
+      // 在 Page({ 后插入 behaviors
+      content = content.replace(/\bPage\s*\(\s*\{/, 'Page({\n  behaviors: [i18nBehavior],');
     } else {
-      // 不是 Page 或 Component，跳过
-      return;
+      // 在 Component({ 后插入 behaviors
+      content = content.replace(/\bComponent\s*\(\s*\{/, 'Component({\n  behaviors: [i18nBehavior],');
     }
 
-    if (this.dryRun) {
-      console.log(`[预览] 将注入 Behavior: ${jsFilePath}`);
-    } else {
-      fs.writeFileSync(jsFilePath, content, 'utf-8');
-      console.log(`[已注入 Behavior] ${jsFilePath}`);
-    }
-    this.behaviorInjectedCount++;
+    return content;
   }
 
   // ==================== 文件处理 ====================
@@ -553,7 +542,20 @@ class WxI18nReplacer {
   injectBehaviors() {
     for (const wxmlFile of this.wxmlReplacedFiles) {
       const jsFile = wxmlFile.replace(/\.wxml$/, '.js');
-      this.injectBehavior(jsFile);
+      if (!fs.existsSync(jsFile)) continue;
+
+      const original = fs.readFileSync(jsFile, 'utf-8');
+      const modified = this.injectBehavior(original, jsFile);
+
+      if (original === modified) continue;
+
+      if (this.dryRun) {
+        console.log(`[预览] 将注入 Behavior: ${jsFile}`);
+      } else {
+        fs.writeFileSync(jsFile, modified, 'utf-8');
+        console.log(`[已注入 Behavior] ${jsFile}`);
+      }
+      this.behaviorInjectedCount++;
     }
   }
 
