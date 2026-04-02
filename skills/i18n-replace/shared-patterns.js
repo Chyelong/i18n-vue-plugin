@@ -16,9 +16,13 @@ const INDEX_MATCH_REGEX = /\.(?:indexOf|includes)\s*\(\s*$/;
 // Vue 脚本需扩展为含 habit 的版本
 const STORAGE_KEY_REGEX_BASE = /(?:localStorage\s*\.\s*(?:get|set)Item)\s*\(\s*$/;
 
+// 微信小程序存储 API key
+const WX_STORAGE_REGEX = /wx\s*\.\s*(?:set|get|remove)Storage(?:Sync)?\s*\(\s*(?:\{\s*key\s*:\s*)?$/;
+
 module.exports = {
   SWITCH_CASE_REGEX,
   BRACKET_ACCESS_REGEX,
   INDEX_MATCH_REGEX,
   STORAGE_KEY_REGEX_BASE,
+  WX_STORAGE_REGEX,
 };

@@ -56,6 +56,13 @@ describe('shared-patterns.js', () => {
     assert.ok(sp.STORAGE_KEY_REGEX_BASE.test('localStorage.getItem('));
     assert.ok(!sp.STORAGE_KEY_REGEX_BASE.test('habit.get('));
   });
+
+  it('WX_STORAGE_REGEX matches wx storage APIs', () => {
+    assert.ok(sp.WX_STORAGE_REGEX.test('wx.setStorageSync('));
+    assert.ok(sp.WX_STORAGE_REGEX.test('wx.getStorageSync('));
+    assert.ok(sp.WX_STORAGE_REGEX.test('wx.setStorage({key: '));
+    assert.ok(!sp.WX_STORAGE_REGEX.test('wx.showToast('));
+  });
 });
 
 describe('VueI18nReplacer dry-run integration', () => {
