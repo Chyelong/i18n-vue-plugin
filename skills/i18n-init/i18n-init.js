@@ -562,6 +562,9 @@ const I18N_BROWSER_TEMPLATE = `/**
   var I18N_BASE_PATH = (typeof window.__I18N_PATH__ === 'string') ? window.__I18N_PATH__ : './i18n/';
   if (I18N_BASE_PATH.charAt(I18N_BASE_PATH.length - 1) !== '/') I18N_BASE_PATH += '/';
 
+  // 缓存破坏版本戳（可通过 window.__I18N_VERSION__ 自定义，避免浏览器/CDN 缓存旧翻译）
+  var I18N_CACHE_BUSTER = (typeof window.__I18N_VERSION__ === 'string') ? '?v=' + window.__I18N_VERSION__ : '';
+
   // 翻译数据缓存
   var messages = {
     zh: {},
@@ -576,7 +579,7 @@ const I18N_BROWSER_TEMPLATE = `/**
   if (currentLang !== 'zh' && VALID_LANG_REGEX.test(currentLang)) {
     try {
       var syncXhr = new XMLHttpRequest();
-      syncXhr.open('GET', I18N_BASE_PATH + currentLang + '.json', false);
+      syncXhr.open('GET', I18N_BASE_PATH + currentLang + '.json' + I18N_CACHE_BUSTER, false);
       syncXhr.send();
       if (syncXhr.status === 200) {
         messages[currentLang] = JSON.parse(syncXhr.responseText);
@@ -645,7 +648,7 @@ const I18N_BROWSER_TEMPLATE = `/**
 
     // 通过 XHR 加载 JSON 语言包
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', I18N_BASE_PATH + lang + '.json', true);
+    xhr.open('GET', I18N_BASE_PATH + lang + '.json' + I18N_CACHE_BUSTER, true);
     xhr.onreadystatechange = function() {
       if (xhr.readyState === 4) {
         if (xhr.status === 200) {
