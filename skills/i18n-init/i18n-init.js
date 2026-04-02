@@ -72,7 +72,7 @@ let currentLang = (function() {
 const _initialLang = currentLang; // 记录模块加载时的语言，用于 initI18n 判断是否需要刷新
 
 // 支持的语言代码（防止路径遍历攻击）
-const VALID_LANG_REGEX = /^[a-z]{2}(-[A-Z]{2})?$/;
+const VALID_LANG_REGEX = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/;
 
 // 图片 CSS 变量注册表 { varName: { path, raw } }
 const imgVarRegistry = {};
@@ -163,6 +163,12 @@ function $t(text, params) {
 
   if (translated) {
     return interpolate(translated, params);
+  }
+
+  // 语言回退链：en-US → en → zh（原始 key）
+  const baseLang = currentLang.split('-')[0];
+  if (baseLang !== currentLang && messages[baseLang] && messages[baseLang][text]) {
+    return interpolate(messages[baseLang][text], params);
   }
 
   // 没有翻译，返回原文
@@ -354,7 +360,7 @@ const messages = {
 };
 
 // 支持的语言代码（防止路径遍历攻击）
-const VALID_LANG_REGEX = /^[a-z]{2}(-[A-Z]{2})?$/;
+const VALID_LANG_REGEX = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/;
 
 // 图片 CSS 变量注册表 { varName: { path, raw } }
 const imgVarRegistry = {};
@@ -481,6 +487,12 @@ function $t(text, params = {}) {
     return interpolate(translated, params);
   }
 
+  // 语言回退链：en-US → en → zh（原始 key）
+  const baseLang = currentLang.split('-')[0];
+  if (baseLang !== currentLang && messages[baseLang] && messages[baseLang][text]) {
+    return interpolate(messages[baseLang][text], params);
+  }
+
   // 没有翻译，返回原文
   return interpolate(text, params);
 }
@@ -557,7 +569,7 @@ const I18N_BROWSER_TEMPLATE = `/**
   };
 
   // 支持的语言代码（防止路径遍历攻击）
-  var VALID_LANG_REGEX = /^[a-z]{2}(-[A-Z]{2})?$/;
+  var VALID_LANG_REGEX = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/;
 
   // 模块加载时同步预加载翻译数据（确保后续脚本中 $t() 立即可用）
   // 仅在非中文环境下执行，对小型静态项目可接受
@@ -702,6 +714,12 @@ const I18N_BROWSER_TEMPLATE = `/**
 
     if (translated) {
       return interpolate(translated, params);
+    }
+
+    // 语言回退链：en-US → en → zh（原始 key）
+    var baseLang = currentLang.split('-')[0];
+    if (baseLang !== currentLang && messages[baseLang] && messages[baseLang][text]) {
+      return interpolate(messages[baseLang][text], params);
     }
 
     // 没有翻译，返回原文
