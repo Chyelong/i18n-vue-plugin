@@ -64,7 +64,7 @@ node <skill-directory>/html-i18n-replace.js <目标路径> --i18n-dir <i18n-dir>
 
 | 场景 | 处理方式 |
 |------|----------|
-| script 字符串 `"中文"` | 有 `this.` → `$t("中文")`，无 → `window.$t("中文")` |
+| script 字符串 `"中文"` | → `window.$t("中文")`（始终使用 window. 前缀） |
 | template 文本 `<div>中文</div>` | → `<div>{{ $t("中文") }}</div>` |
 | template 属性 `placeholder="请输入"` | → `:placeholder="$t('请输入')"` |
 | 动态属性 `:title="'标题'"` | → `:title="$t('标题')"` |
@@ -89,3 +89,23 @@ node <skill-directory>/html-i18n-replace.js <目标路径> --i18n-dir <i18n-dir>
 **Vue 特有**：`v-if`、`v-show` 中的字符串，`class`/`id`/`name`/`key`/`ref`/`style` 属性
 
 **HTML 特有**：`class`/`id`/`name`/`style`/`type`/`href`/`src`/`action` 属性，`on*` 事件属性，void 元素
+
+## 验证命令
+
+替换完成后，运行验证脚本检查高危模式和翻译质量：
+
+```bash
+# 全量扫描（代码 + 翻译质量）
+node skills/i18n-replace/i18n-validate.js <directory> --type <vue|html> --i18n-dir <path> --lang <lang>
+
+# 仅翻译质量
+node skills/i18n-replace/i18n-validate.js <directory> --check-translation --i18n-dir <path> --lang <lang>
+
+# 检查 JSON 可疑条目
+node skills/i18n-replace/i18n-validate.js <directory> --check-json --i18n-dir <path> --lang <lang>
+
+# 自动修复裸 $t()
+node skills/i18n-replace/i18n-validate.js <directory> --fix
+```
+
+退出码：0 = 全部通过，1 = 存在严重/高危问题。

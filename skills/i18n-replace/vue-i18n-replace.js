@@ -52,14 +52,13 @@ const SKIP_ATTRS = [
 ];
 
 // ===== 高危场景跳过规则（来自实战经验） =====
+const {
+  SWITCH_CASE_REGEX,
+  BRACKET_ACCESS_REGEX,
+  INDEX_MATCH_REGEX,
+} = require('./shared-patterns');
 
-// switch/case 语句的 case 值（通常与后端数据比较）
-const SWITCH_CASE_REGEX = /\bcase\s+$/;
-
-// 方括号属性访问（如 item.data['类型']、obj['键名']）
-const BRACKET_ACCESS_REGEX = /\[\s*$/;
-
-// 本地存储 key（habit.get/set、localStorage）
+// Vue 独有：含 habit 支持的存储键检测
 const STORAGE_KEY_REGEX = /(?:habit\s*\.\s*(?:get|set)|localStorage\s*\.\s*(?:get|set)Item)\s*\(\s*$/;
 
 // 路由 name 参数（$router.push/replace 的 name）
@@ -68,8 +67,8 @@ const ROUTER_NAME_REGEX = /(?:\$router\s*\.\s*(?:push|replace)\s*\(\s*\{[^}]*nam
 // EventBus 事件名
 const EVENTBUS_REGEX = /(?:EventBus|eventBus|\$bus|\$event)\s*\.\s*\$?(?:on|emit|off|once)\s*\(\s*$/;
 
-// indexOf/includes 匹配后端数据
-const INDEX_MATCH_REGEX = /\.(?:indexOf|includes)\s*\(\s*$/;
+// el-table-column 的 prop 属性（数据路径，不应翻译）
+const TABLE_PROP_REGEX = /el-table-column/;
 
 class VueI18nReplacer {
   constructor(options = {}) {
@@ -195,6 +194,8 @@ class VueI18nReplacer {
     result = result.replace(DYNAMIC_ATTR_REGEX, (match, attr, expression) => {
       // 跳过特定属性
       if (SKIP_ATTRS.includes(attr)) return match;
+      // el-table-column 的 prop/sort-by 属性是数据路径，不应翻译
+      if ((attr === 'prop' || attr === 'sort-by') && TABLE_PROP_REGEX.test(match)) return match;
       // 已经被 i18n 包裹
       if (ALREADY_I18N.test(expression)) return match;
 
@@ -215,8 +216,8 @@ class VueI18nReplacer {
 
         this.recordText(literalText);
         hasChange = true;
-        // 包裹：'你好' -> $t('你好') (template 中不能用 window)
-        return `$t(${quote}${this.escapeQuote(literalText)}${quote})`;
+        // 始终用单引号包裹，避免 Vue 2 buble 编译器 \" 转义问题
+        return `$t('${this.escapeQuote(literalText)}')`;
       });
 
       if (hasChange) {
@@ -442,10 +443,14 @@ class VueI18nReplacer {
           return match;
         }
 
-        // 检查是否在模板字符串中有变量
-        // script 中：有 this. 时用 $t()，否则用 window.$t()
-        const useWindow = !line.includes('this.');
-        const prefix = useWindow ? 'window.' : '';
+        // 数据映射字典值 — 仅记录警告，不跳过替换
+        if (/^\s*\d+\s*:\s*$/.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: '⚠️ 疑似数据映射字典值（数值键→中文值，需人工确认）', line: line.trim() });
+        }
+
+        // script 区域始终使用 window.$t()
+        // template 区域的 $t() 由 processTemplate 方法处理（不经过此函数）
+        const prefix = 'window.';
 
         // 处理包含 HTML 标签的字符串，如 '<b class="c_type">台桌</b>'
         // 只替换标签之间的中文文本，保留 HTML 结构
@@ -471,14 +476,14 @@ class VueI18nReplacer {
 
         // 检查是否在模板字符串中有变量（模板字符串由 processTemplateString 负责 recordText）
         if (quote === '`' && /\$\{/.test(text)) {
-          return this.processTemplateString(match, text, useWindow);
+          return this.processTemplateString(match, text, true);
         }
 
         this.recordText(text);
 
-        // 使用中文作为 key（根据环境决定是否使用 window.）
+        // 使用中文作为 key（script 区域始终使用 window.$t）
         const replacement = `$t('${this.escapeQuote(text)}')`;
-        return useWindow ? `window.${replacement}` : replacement;
+        return `window.${replacement}`;
       });
     });
 
@@ -632,7 +637,7 @@ class VueI18nReplacer {
         continue;
       }
 
-      if (stats.isDirectory() && !file.startsWith('.') && file !== 'node_modules' && file !== 'dist' && file !== 'build') {
+      if (stats.isDirectory() && !file.startsWith('.') && file !== 'node_modules' && file !== 'dist' && file !== 'build' && file !== 'vendor' && file !== 'lib' && file !== 'third-party') {
         // 检查排除模式
         if (this.exclude.some(pattern => file === pattern || fullPath.includes(pattern))) continue;
         await this.processDirectory(fullPath);

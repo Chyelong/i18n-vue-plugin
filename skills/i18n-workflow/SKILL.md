@@ -113,6 +113,31 @@ digraph i18n_workflow {
 
 ---
 
+### 状态追踪机制
+
+工作流启动时在 i18n 目录下创建或读取 `.i18n-workflow-state.json`：
+
+```json
+{
+  "version": "1.0",
+  "projectType": "vue",
+  "targetPath": "./src",
+  "langs": ["en"],
+  "currentStep": "3.5",
+  "completedSteps": ["0", "1", "2", "3"],
+  "lastUpdated": "2026-04-02T10:30:00Z"
+}
+```
+
+**规则：**
+- 每完成一个步骤，更新 `currentStep` 和 `completedSteps`
+- 新会话检测到状态文件时提示：> "检测到上次工作流在步骤 {currentStep} 中断。是否继续？"
+- 用户确认继续 → 跳过已完成步骤
+- 用户选择重新开始 → 清空状态文件
+- 工作流完成（步骤 7）→ 删除状态文件
+
+---
+
 ### 步骤 1：检查 i18n 目录下的文件树和任务清单【不可跳过】
 
 **必须执行的操作**：使用 Glob 工具实际查找以下两个文件（不能凭 i18n 目录存在就假设文件存在）：
@@ -177,6 +202,9 @@ Vue.prototype.$t = $t
 </script>
 ```
 
+**初始化后必检（静态项目）：**
+- 检查 `<html lang="...">` 属性，如果是 `lang="en"`（常见模板默认值），必须改为 `lang="zh"`，否则语言检测优先级会误判为英文环境。
+
 ---
 
 ### 步骤 3：替换中文
@@ -229,6 +257,20 @@ node <i18n-replace-skill-directory>/html-i18n-replace.js <目标路径> --i18n-d
 - 全部扫描通过（0 命中）→ 继续步骤 4
 - 修复后重新执行对应的 Grep 确认归零
 
+**自动化扫描（推荐替代手动 grep）：**
+
+```bash
+node <plugin-path>/skills/i18n-replace/i18n-validate.js <target-dir> --type <vue|html> --i18n-dir <path> --lang <lang>
+```
+
+- 退出码 0 → 全部通过，继续步骤 4
+- 退出码 1 → 主线程根据报告逐条修复，重新运行直到退出码 0
+
+**JSON 清理（验证脚本完成后）：**
+1. 运行 `i18n-validate.js --check-json` 检查翻译 JSON 中的可疑条目
+2. 删除来自第三方库的条目（如分页组件"首页""上一页"）
+3. 删除数据映射字段条目（如含管道符的混合字段）
+
 ### 步骤 4：翻译语言包
 
 派发 `i18n-text` 子代理：
@@ -270,6 +312,12 @@ for (const [key, val] of Object.entries(data)) {
 
 发现问题 → 主线程直接修复翻译 JSON → 修复后重新检查 → 全部通过后继续步骤 5。
 
+**自动化检查（推荐替代手动代码）：**
+
+```bash
+node <plugin-path>/skills/i18n-replace/i18n-validate.js <target-dir> --check-translation --i18n-dir <path> --lang <lang>
+```
+
 ### 步骤 5：首次审核（haiku 快速审核）
 
 派发 `i18n-code` 子代理，首次审核使用 **haiku 模型**快速扫描：
@@ -279,6 +327,14 @@ subagent: i18n-code
 model: haiku
 task: 审核 i18n 替换
 prompt: 对比 <目标路径> 下文件国际化前后的逻辑差异，判断 i18n 替换是否改变了原有代码逻辑。项目类型为 <type>。重点检查：1）比较运算符/switch/case 中的字符串是否被误替换；2）对象 key、API 参数、路由标识是否被替换；3）data-i18n 值与文本是否一致（HTML 项目）；4）代码结构是否被意外修改（属性丢失等）。返回审核结果：通过/未通过，以及具体问题列表。
+```
+
+**⚠️ 全项目审核要求（实战经验：模块级审核遗漏 50+ 高危问题）：**
+
+仅对当前模块做子代理审核**不够**。每完成 3-5 个模块后，必须对已完成的所有模块做一次全量扫描：
+
+```bash
+node <plugin-path>/skills/i18n-replace/i18n-validate.js <project-src> --type vue
 ```
 
 ### 步骤 6：审核循环

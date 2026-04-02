@@ -72,7 +72,7 @@ let currentLang = (function() {
 const _initialLang = currentLang; // 记录模块加载时的语言，用于 initI18n 判断是否需要刷新
 
 // 支持的语言代码（防止路径遍历攻击）
-const VALID_LANG_REGEX = /^[a-z]{2}(-[A-Z]{2})?$/;
+const VALID_LANG_REGEX = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/;
 
 // 图片 CSS 变量注册表 { varName: { path, raw } }
 const imgVarRegistry = {};
@@ -163,6 +163,12 @@ function $t(text, params) {
 
   if (translated) {
     return interpolate(translated, params);
+  }
+
+  // 语言回退链：en-US → en → zh（原始 key）
+  const baseLang = currentLang.split('-')[0];
+  if (baseLang !== currentLang && messages[baseLang] && messages[baseLang][text]) {
+    return interpolate(messages[baseLang][text], params);
   }
 
   // 没有翻译，返回原文
@@ -306,6 +312,11 @@ if (typeof window !== 'undefined') {
   window.initI18n = initI18n;
 }
 
+// Vue 2 自动挂载（import Vue 后 Vue 即在作用域内）
+import Vue from 'vue'
+Vue.prototype.$t = $t
+Vue.prototype.$img = $img
+
 export { $t, $img, $imgVar, initI18n, setLang, getLang, getSupportedLangs, onLangChange, messages, SUPPORTED_LANGS };
 export default { $t, $img, $imgVar, initI18n, setLang, getLang, getSupportedLangs, onLangChange };
 `;
@@ -349,7 +360,7 @@ const messages = {
 };
 
 // 支持的语言代码（防止路径遍历攻击）
-const VALID_LANG_REGEX = /^[a-z]{2}(-[A-Z]{2})?$/;
+const VALID_LANG_REGEX = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/;
 
 // 图片 CSS 变量注册表 { varName: { path, raw } }
 const imgVarRegistry = {};
@@ -476,6 +487,12 @@ function $t(text, params = {}) {
     return interpolate(translated, params);
   }
 
+  // 语言回退链：en-US → en → zh（原始 key）
+  const baseLang = currentLang.split('-')[0];
+  if (baseLang !== currentLang && messages[baseLang] && messages[baseLang][text]) {
+    return interpolate(messages[baseLang][text], params);
+  }
+
   // 没有翻译，返回原文
   return interpolate(text, params);
 }
@@ -545,6 +562,9 @@ const I18N_BROWSER_TEMPLATE = `/**
   var I18N_BASE_PATH = (typeof window.__I18N_PATH__ === 'string') ? window.__I18N_PATH__ : './i18n/';
   if (I18N_BASE_PATH.charAt(I18N_BASE_PATH.length - 1) !== '/') I18N_BASE_PATH += '/';
 
+  // 缓存破坏版本戳（可通过 window.__I18N_VERSION__ 自定义，避免浏览器/CDN 缓存旧翻译）
+  var I18N_CACHE_BUSTER = (typeof window.__I18N_VERSION__ === 'string') ? '?v=' + window.__I18N_VERSION__ : '';
+
   // 翻译数据缓存
   var messages = {
     zh: {},
@@ -552,14 +572,14 @@ const I18N_BROWSER_TEMPLATE = `/**
   };
 
   // 支持的语言代码（防止路径遍历攻击）
-  var VALID_LANG_REGEX = /^[a-z]{2}(-[A-Z]{2})?$/;
+  var VALID_LANG_REGEX = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/;
 
   // 模块加载时同步预加载翻译数据（确保后续脚本中 $t() 立即可用）
   // 仅在非中文环境下执行，对小型静态项目可接受
   if (currentLang !== 'zh' && VALID_LANG_REGEX.test(currentLang)) {
     try {
       var syncXhr = new XMLHttpRequest();
-      syncXhr.open('GET', I18N_BASE_PATH + currentLang + '.json', false);
+      syncXhr.open('GET', I18N_BASE_PATH + currentLang + '.json' + I18N_CACHE_BUSTER, false);
       syncXhr.send();
       if (syncXhr.status === 200) {
         messages[currentLang] = JSON.parse(syncXhr.responseText);
@@ -628,7 +648,7 @@ const I18N_BROWSER_TEMPLATE = `/**
 
     // 通过 XHR 加载 JSON 语言包
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', I18N_BASE_PATH + lang + '.json', true);
+    xhr.open('GET', I18N_BASE_PATH + lang + '.json' + I18N_CACHE_BUSTER, true);
     xhr.onreadystatechange = function() {
       if (xhr.readyState === 4) {
         if (xhr.status === 200) {
@@ -697,6 +717,12 @@ const I18N_BROWSER_TEMPLATE = `/**
 
     if (translated) {
       return interpolate(translated, params);
+    }
+
+    // 语言回退链：en-US → en → zh（原始 key）
+    var baseLang = currentLang.split('-')[0];
+    if (baseLang !== currentLang && messages[baseLang] && messages[baseLang][text]) {
+      return interpolate(messages[baseLang][text], params);
     }
 
     // 没有翻译，返回原文

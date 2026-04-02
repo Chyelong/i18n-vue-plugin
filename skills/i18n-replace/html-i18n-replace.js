@@ -51,10 +51,12 @@ const SKIP_ATTRS = [
 const SKIP_DATA_ATTR_REGEX = /^data-(?!i18n)/;
 
 // ===== 高危场景跳过规则（来自实战经验） =====
-const SWITCH_CASE_REGEX = /\bcase\s+$/;
-const BRACKET_ACCESS_REGEX = /\[\s*$/;
-const STORAGE_KEY_REGEX = /(?:localStorage\s*\.\s*(?:get|set)Item)\s*\(\s*$/;
-const INDEX_MATCH_REGEX = /\.(?:indexOf|includes)\s*\(\s*$/;
+const {
+  SWITCH_CASE_REGEX,
+  BRACKET_ACCESS_REGEX,
+  INDEX_MATCH_REGEX,
+  STORAGE_KEY_REGEX_BASE: STORAGE_KEY_REGEX,
+} = require('./shared-patterns');
 
 // HTML void 元素（不会有文本子节点）
 const VOID_ELEMENTS = [
@@ -297,6 +299,8 @@ class HtmlI18nReplacer {
       // 包含引号或已被 i18n 处理
       if (ALREADY_I18N.test(text)) return match;
       if (text.includes('"') || text.includes("'")) return match;
+      // 含 Vue 插值 {{}} 的文本不能用 data-i18n（applyI18n 会覆盖 Vue 动态渲染）
+      if (/\{\{.*?\}\}/.test(text)) return match;
 
       this.recordText(trimmed);
 
@@ -389,11 +393,13 @@ class HtmlI18nReplacer {
 
       if (stats.isSymbolicLink()) continue;
 
-      if (stats.isDirectory() && !file.startsWith('.') && file !== 'node_modules' && file !== 'dist' && file !== 'build') {
+      if (stats.isDirectory() && !file.startsWith('.') && file !== 'node_modules' && file !== 'dist' && file !== 'build' && file !== 'vendor' && file !== 'lib' && file !== 'third-party') {
         if (this.exclude.some(pattern => file === pattern || fullPath.includes(pattern))) continue;
         await this.processDirectory(fullPath);
       } else {
         if (this.exclude.some(pattern => file === pattern || fullPath.includes(pattern))) continue;
+        // 第三方压缩文件自动跳过（实战经验：bestime.min.js 被误改导致页面崩溃）
+        if (file.endsWith('.min.js') || file.endsWith('.min.css')) continue;
         const ext = path.extname(file).toLowerCase();
         if (HTML_EXTS.includes(ext) || JS_EXTS.includes(ext)) {
           await this.processFile(fullPath);
