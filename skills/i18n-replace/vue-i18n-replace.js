@@ -481,9 +481,9 @@ class VueI18nReplacer {
 
         this.recordText(text);
 
-        // 使用中文作为 key（根据环境决定是否使用 window.）
+        // 使用中文作为 key（script 区域始终使用 window.$t）
         const replacement = `$t('${this.escapeQuote(text)}')`;
-        return useWindow ? `window.${replacement}` : replacement;
+        return `window.${replacement}`;
       });
     });
 

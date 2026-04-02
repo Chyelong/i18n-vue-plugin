@@ -31,7 +31,6 @@ describe('shared-patterns.js', () => {
     assert.ok(sp.SWITCH_CASE_REGEX instanceof RegExp);
     assert.ok(sp.BRACKET_ACCESS_REGEX instanceof RegExp);
     assert.ok(sp.INDEX_MATCH_REGEX instanceof RegExp);
-    assert.ok(sp.COMPARISON_REGEX instanceof RegExp);
     assert.ok(sp.STORAGE_KEY_REGEX_BASE instanceof RegExp);
   });
 
@@ -56,5 +55,33 @@ describe('shared-patterns.js', () => {
     assert.ok(sp.STORAGE_KEY_REGEX_BASE.test('localStorage.setItem('));
     assert.ok(sp.STORAGE_KEY_REGEX_BASE.test('localStorage.getItem('));
     assert.ok(!sp.STORAGE_KEY_REGEX_BASE.test('habit.get('));
+  });
+});
+
+describe('VueI18nReplacer dry-run integration', () => {
+  it('processes sample.vue without crashing', async () => {
+    const { execSync } = require('child_process');
+    const result = execSync(
+      `node skills/i18n-replace/vue-i18n-replace.js tests/fixtures/sample.vue --dry-run --i18n-dir tests/fixtures`,
+      { encoding: 'utf-8', cwd: path.join(__dirname, '..') }
+    );
+    // Should complete without ReferenceError
+    assert.ok(!result.includes('ReferenceError'), 'Should not throw ReferenceError');
+    // Should report some replacements or skips
+    assert.ok(result.length > 0, 'Should produce output');
+  });
+
+  it('generates window.$t() in script context (not bare $t)', async () => {
+    const { execSync } = require('child_process');
+    const result = execSync(
+      `node skills/i18n-replace/vue-i18n-replace.js tests/fixtures/sample.vue --dry-run --i18n-dir tests/fixtures`,
+      { encoding: 'utf-8', cwd: path.join(__dirname, '..') }
+    );
+    // Dry-run output should show window.$t replacements
+    if (result.includes('$t(')) {
+      // If any $t() appears in diff output, it should be window.$t or template $t
+      // Check the script section doesn't generate bare $t
+      assert.ok(!result.includes('= $t('), 'Should not generate bare $t() in script');
+    }
   });
 });

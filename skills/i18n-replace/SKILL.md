@@ -64,7 +64,7 @@ node <skill-directory>/html-i18n-replace.js <目标路径> --i18n-dir <i18n-dir>
 
 | 场景 | 处理方式 |
 |------|----------|
-| script 字符串 `"中文"` | 有 `this.` → `$t("中文")`，无 → `window.$t("中文")` |
+| script 字符串 `"中文"` | → `window.$t("中文")`（始终使用 window. 前缀） |
 | template 文本 `<div>中文</div>` | → `<div>{{ $t("中文") }}</div>` |
 | template 属性 `placeholder="请输入"` | → `:placeholder="$t('请输入')"` |
 | 动态属性 `:title="'标题'"` | → `:title="$t('标题')"` |
