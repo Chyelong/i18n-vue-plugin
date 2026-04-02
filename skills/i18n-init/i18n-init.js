@@ -8,7 +8,7 @@
  *
  * 选项：
  *   --langs      需要翻译的目标语言，逗号分隔 (默认: tw)
- *   --type       输出类型: esm, browser, vue (默认: vue)
+ *   --type       输出类型: esm, browser, vue, wx (默认: vue)
  */
 
 const fs = require('fs');
@@ -830,10 +830,68 @@ const I18N_BROWSER_TEMPLATE = `/**
 })(typeof window !== 'undefined' ? window : this);
 `;
 
+// 微信小程序版本
+const I18N_WX_TEMPLATE = `/**
+ * i18n 国际化模块 (微信小程序版本)
+ * 基准语言：中文简体
+ * 翻译函数挂载到 global 对象
+ */
+
+const localLang = require('./{{defaultLang}}.json')
+global._i18nLang = localLang
+global._i18nLocale = '{{defaultLang}}'
+
+/**
+ * 翻译函数
+ * @param {string} key - 中文原文
+ * @param {object} params - 插值参数
+ * @returns {string} 翻译后的文本
+ */
+global.$t = function(key, params) {
+  var text = global._i18nLang[key] || key
+  if (!params) return text
+  return text.replace(/\\{(\\w+)\\}/g, function(match, k) {
+    return params.hasOwnProperty(k) ? params[k] : match
+  })
+}
+
+/**
+ * 从云端加载语言包
+ * @param {string} url - 语言包 JSON 的 URL
+ * @param {string} locale - 语言标识
+ * @returns {Promise}
+ */
+global.loadRemoteLocale = function(url, locale) {
+  return new Promise(function(resolve, reject) {
+    wx.request({
+      url: url,
+      success: function(res) {
+        global._i18nLang = res.data
+        global._i18nLocale = locale || '{{defaultLang}}'
+        resolve(res.data)
+      },
+      fail: reject
+    })
+  })
+}
+`;
+
+const I18N_WX_BEHAVIOR_TEMPLATE = `/**
+ * i18n Behavior
+ * 自动将翻译数据注入到页面/组件的 data 中
+ * 在 WXML 中通过 {{$t['key']}} 访问
+ */
+module.exports = Behavior({
+  attached: function() {
+    this.setData({ $t: global._i18nLang })
+  }
+})
+`;
+
 class I18nInitializer {
   constructor(options = {}) {
     this.langs = options.langs || DEFAULT_CONFIG.langs;
-    this.type = options.type || 'vue'; // esm, browser, vue
+    this.type = options.type || 'vue'; // esm, browser, vue, wx
   }
 
   init(targetDir) {
@@ -844,6 +902,10 @@ class I18nInitializer {
 
     // 生成 i18n.js
     this.generateI18nFile(targetDir);
+
+    if (this.type === 'wx') {
+      this.generateBehaviorFile(targetDir);
+    }
 
     // 生成语言 JSON 文件
     this.generateLangFiles(targetDir);
@@ -874,17 +936,28 @@ class I18nInitializer {
       case 'vue':
         template = I18N_VUE_TEMPLATE;
         break;
+      case 'wx':
+        template = I18N_WX_TEMPLATE;
+        filename = 'i18n.js';
+        break;
       default:
         template = I18N_ESM_TEMPLATE;
     }
 
     const content = template
       .replace(/\{\{langKeys\}\}/g, langKeys)
-      .replace(/\{\{langList\}\}/g, langList);
+      .replace(/\{\{langList\}\}/g, langList)
+      .replace(/\{\{defaultLang\}\}/g, this.langs[0] || 'tw');
 
     const filePath = path.join(dir, filename);
     fs.writeFileSync(filePath, content, 'utf-8');
     console.log(`生成: ${filename}`);
+  }
+
+  generateBehaviorFile(dir) {
+    const filePath = path.join(dir, 'i18n-behavior.js');
+    fs.writeFileSync(filePath, I18N_WX_BEHAVIOR_TEMPLATE, 'utf-8');
+    console.log(`生成: i18n-behavior.js`);
   }
 
   generateLangFiles(dir) {
@@ -919,7 +992,7 @@ i18n 初始化工具 (中文为键)
 
 选项：
   --langs      目标语言，逗号分隔 (默认: tw)
-  --type       输出类型: esm, browser, vue (默认: vue)
+  --type       输出类型: esm, browser, vue, wx (默认: vue)
 
 示例：
   node i18n-init.js ./src/i18n                        # Vue 项目
