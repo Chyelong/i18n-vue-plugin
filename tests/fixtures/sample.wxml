@@ -1,0 +1,13 @@
+<!-- 测试注释应该跳过 -->
+<view class="container">
+  <text>你好世界</text>
+  <text>提交订单</text>
+  <input placeholder="请输入手机号" />
+  <button disabled="{{loading}}">确认支付</button>
+  <view wx:if="{{status === '已完成'}}">完成</view>
+  <view>共{{num}}件商品</view>
+  <view>{{item.name}}</view>
+  <view>{{$t['已替换']}}</view>
+  <navigator url="/pages/home/home">首页</navigator>
+  <wxs src="../../utils/bestime.wxs" module="computed" />
+</view>
