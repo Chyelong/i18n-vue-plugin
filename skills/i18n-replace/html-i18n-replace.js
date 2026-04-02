@@ -51,10 +51,12 @@ const SKIP_ATTRS = [
 const SKIP_DATA_ATTR_REGEX = /^data-(?!i18n)/;
 
 // ===== 高危场景跳过规则（来自实战经验） =====
-const SWITCH_CASE_REGEX = /\bcase\s+$/;
-const BRACKET_ACCESS_REGEX = /\[\s*$/;
-const STORAGE_KEY_REGEX = /(?:localStorage\s*\.\s*(?:get|set)Item)\s*\(\s*$/;
-const INDEX_MATCH_REGEX = /\.(?:indexOf|includes)\s*\(\s*$/;
+const {
+  SWITCH_CASE_REGEX,
+  BRACKET_ACCESS_REGEX,
+  INDEX_MATCH_REGEX,
+  STORAGE_KEY_REGEX_BASE: STORAGE_KEY_REGEX,
+} = require('./shared-patterns');
 
 // HTML void 元素（不会有文本子节点）
 const VOID_ELEMENTS = [

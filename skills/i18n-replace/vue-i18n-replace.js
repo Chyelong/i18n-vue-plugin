@@ -52,14 +52,13 @@ const SKIP_ATTRS = [
 ];
 
 // ===== 高危场景跳过规则（来自实战经验） =====
+const {
+  SWITCH_CASE_REGEX,
+  BRACKET_ACCESS_REGEX,
+  INDEX_MATCH_REGEX,
+} = require('./shared-patterns');
 
-// switch/case 语句的 case 值（通常与后端数据比较）
-const SWITCH_CASE_REGEX = /\bcase\s+$/;
-
-// 方括号属性访问（如 item.data['类型']、obj['键名']）
-const BRACKET_ACCESS_REGEX = /\[\s*$/;
-
-// 本地存储 key（habit.get/set、localStorage）
+// Vue 独有：含 habit 支持的存储键检测
 const STORAGE_KEY_REGEX = /(?:habit\s*\.\s*(?:get|set)|localStorage\s*\.\s*(?:get|set)Item)\s*\(\s*$/;
 
 // 路由 name 参数（$router.push/replace 的 name）
@@ -67,9 +66,6 @@ const ROUTER_NAME_REGEX = /(?:\$router\s*\.\s*(?:push|replace)\s*\(\s*\{[^}]*nam
 
 // EventBus 事件名
 const EVENTBUS_REGEX = /(?:EventBus|eventBus|\$bus|\$event)\s*\.\s*\$?(?:on|emit|off|once)\s*\(\s*$/;
-
-// indexOf/includes 匹配后端数据
-const INDEX_MATCH_REGEX = /\.(?:indexOf|includes)\s*\(\s*$/;
 
 // el-table-column 的 prop 属性（数据路径，不应翻译）
 const TABLE_PROP_REGEX = /el-table-column/;
