@@ -1,6 +1,6 @@
 # i18n-vue
 
-这是一个面向 Vue / 静态 HTML 项目的 i18n 自动化插件与技能集合，提供初始化 i18n、自动替换中文、同步翻译、全流程工作流，以及扫描/翻译/审核子代理能力。兼容 Claude CLI、Gemini CLI、Codex。
+这是一个面向 Vue / 静态 HTML / 微信小程序项目的 i18n 自动化插件与技能集合，提供初始化 i18n、自动替换中文、同步翻译、全流程工作流，以及扫描/翻译/审核子代理能力。兼容 Claude CLI、Gemini CLI、Codex。
 
 ## 插件结构（官方标准）
 
@@ -24,10 +24,16 @@
 安装后可用命令示例（自动带插件命名空间）：
 
 ```bash
+# Vue 项目
 /i18n-vue:i18n-workflow ./src --langs en
 /i18n-vue:i18n-init ./src/i18n --langs en,ja
 /i18n-vue:i18n-replace ./src/views --lang en
 /i18n-vue:i18n-sync ./src --lang en
+
+# 微信小程序
+/i18n-vue:i18n-workflow ./pages --type wx --langs tw
+/i18n-vue:i18n-init ./i18n --type wx --langs tw
+/i18n-vue:i18n-replace ./pages --type wx --lang tw
 ```
 
 本地调试：
@@ -53,9 +59,14 @@ cd i18n-vue-plugin
 3. 执行脚本命令（示例）：
 
 ```bash
+# Vue 项目
 node skills/i18n-init/i18n-init.js ./src/i18n --type vue --langs en,ja
 node skills/i18n-replace/vue-i18n-replace.js ./src --i18n-dir ./src/i18n --lang en
 node skills/i18n-sync/sync-i18n.js ./src --i18n-dir ./src/i18n --lang en
+
+# 微信小程序
+node skills/i18n-init/i18n-init.js ./i18n --type wx --langs tw
+node skills/i18n-replace/wx-i18n-replace.js ./pages --i18n-dir ./i18n --lang tw
 ```
 
 详细约定见：`GEMINI.md`
@@ -90,9 +101,14 @@ cd i18n-vue-plugin
 3. 执行脚本命令（示例）：
 
 ```bash
+# Vue 项目
 node skills/i18n-init/i18n-init.js ./src/i18n --type vue --langs en,ja
 node skills/i18n-replace/vue-i18n-replace.js ./src --i18n-dir ./src/i18n --lang en
 node skills/i18n-sync/sync-i18n.js ./src --i18n-dir ./src/i18n --lang en
+
+# 微信小程序
+node skills/i18n-init/i18n-init.js ./i18n --type wx --langs tw
+node skills/i18n-replace/wx-i18n-replace.js ./pages --i18n-dir ./i18n --lang tw
 ```
 
 详细约定见：`CODEX.md`
@@ -153,6 +169,14 @@ Fetch and follow instructions from https://raw.githubusercontent.com/Chyelong/i1
 ```bash
 /reload-plugins
 ```
+
+## 支持的项目类型
+
+| 类型 | 文件 | 替换方式 | 初始化核心文件 |
+|------|------|----------|---------------|
+| Vue | `.vue` `.js` | `$t()` / `{{ $t() }}` | `index.js` |
+| 静态 HTML/JS | `.html` `.js` `.ts` | `window.$t()` / `data-i18n` | `index.js` |
+| 微信小程序 | `.wxml` `.js` | `global.$t()` / `{{$t['key']}}` | `i18n.js` + `i18n-behavior.js` |
 
 ## 发布前检查清单
 
