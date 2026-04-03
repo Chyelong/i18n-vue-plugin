@@ -914,11 +914,15 @@ class I18nInitializer {
     console.log(`目录: ${targetDir}`);
     console.log(`基准语言: 中文简体 (zh)`);
     console.log(`目标语言: ${this.langs.join(', ')}`);
+    const isWx = this.type === 'wx';
+    const coreFile = isWx ? 'i18n.js' : 'index.js';
+    const langExt = isWx ? '.js' : '.json';
     console.log(`\n文件结构:`);
     console.log(`  ${targetDir}/`);
-    console.log(`  ├── index.js       # 核心模块`);
+    console.log(`  ├── ${coreFile}       # 核心模块`);
+    if (isWx) console.log(`  ├── i18n-behavior.js # Behavior 注入`);
     this.langs.forEach(lang => {
-      console.log(`  └── ${lang}.json        # ${lang} 语言包`);
+      console.log(`  └── ${lang}${langExt}        # ${lang} 语言包`);
     });
   }
 

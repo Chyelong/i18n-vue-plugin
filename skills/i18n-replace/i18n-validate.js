@@ -7,7 +7,7 @@
  *   node i18n-validate.js <directory> [options]
  *
  * 选项：
- *   --type <vue|html>       项目类型 (默认: 自动检测)
+ *   --type <vue|html|wx>    项目类型 (默认: 自动检测)
  *   --i18n-dir <path>       i18n 目录路径 (默认: ./src/i18n)
  *   --lang <lang>           目标语言 (默认: tw)
  *   --check-translation     仅检查翻译 JSON 质量
@@ -40,7 +40,7 @@ if (!targetDir || targetDir.startsWith('-') || process.argv.includes('--help')) 
   node i18n-validate.js <directory> [options]
 
 选项：
-  --type <vue|html>       项目类型 (默认: 自动检测)
+  --type <vue|html|wx>    项目类型 (默认: 自动检测)
   --i18n-dir <path>       i18n 目录路径 (默认: ./src/i18n)
   --lang <lang>           目标语言 (默认: tw)
   --check-translation     仅检查翻译 JSON 质量
@@ -74,6 +74,17 @@ const HTML_PATTERNS = [
   { regex: /data-i18n-data-/,                          severity: '🟠', name: 'data-* 业务属性' },
   { regex: /data-i18n-value=/,                         severity: '🟠', name: 'value 属性标记' },
   { regex: /querySelector.*\$t\s*\(/,                  severity: '🟡', name: 'querySelector 中 $t' },
+];
+
+const WX_PATTERNS = [
+  { regex: /case\s+.*global\.\$t\s*\(/,                              severity: '🔴', name: 'switch case 中 global.$t' },
+  { regex: /[=!]==?\s*global\.\$t\s*\(/,                             severity: '🔴', name: '等值比较中 global.$t' },
+  { regex: /global\.\$t\s*\([^)]*\)\s*[=!]==?/,                     severity: '🔴', name: 'global.$t 后等值比较' },
+  { regex: /\.(?:indexOf|includes)\s*\(\s*global\.\$t\s*\(/,         severity: '🔴', name: 'indexOf/includes 中 global.$t' },
+  { regex: /wx\.(?:set|get|remove)Storage.*global\.\$t\s*\(/,        severity: '🟠', name: 'wx 存储键中 global.$t' },
+  { regex: /wx\.(?:navigateTo|redirectTo).*global\.\$t\s*\(/,        severity: '🟠', name: 'wx 路由参数中 global.$t' },
+  { regex: /\[.*global\.\$t\s*\(/,                                   severity: '🟡', name: '方括号访问中 global.$t' },
+  { regex: /global\.\$t\s*\([^)]*\)\s*:/,                            severity: '🔴', name: '对象 key 中 global.$t' },
 ];
 
 // ===== Scan Functions =====
@@ -212,7 +223,7 @@ function collectFiles(dir, exts) {
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return results; }
   for (const entry of entries) {
     const fp = path.join(dir, entry.name);
-    if (entry.isDirectory() && !entry.name.startsWith('.') && !['node_modules', 'dist', 'build', 'vendor', 'lib', 'third-party'].includes(entry.name)) {
+    if (entry.isDirectory() && !entry.name.startsWith('.') && !['node_modules', 'miniprogram_npm', 'dist', 'build', 'vendor', 'lib', 'libs', 'third-party', 'third_party'].includes(entry.name)) {
       results.push(...collectFiles(fp, exts));
     } else if (exts.some(e => entry.name.endsWith(e)) && !entry.name.endsWith('.min.js')) {
       results.push(fp);
@@ -224,10 +235,12 @@ function collectFiles(dir, exts) {
 // ===== Main =====
 
 const type = projectType === 'auto'
-  ? (fs.existsSync(path.join(targetDir, 'src')) ? 'vue' : 'html')
+  ? (fs.existsSync(path.join(targetDir, 'app.json')) && !fs.existsSync(path.join(targetDir, 'src'))
+      ? 'wx'
+      : fs.existsSync(path.join(targetDir, 'src')) ? 'vue' : 'html')
   : projectType;
-const patterns = type === 'vue' ? VUE_PATTERNS : HTML_PATTERNS;
-const exts = type === 'vue' ? ['.vue', '.js', '.jsx'] : ['.html', '.htm', '.js', '.ts'];
+const patterns = type === 'wx' ? WX_PATTERNS : type === 'vue' ? VUE_PATTERNS : HTML_PATTERNS;
+const exts = type === 'wx' ? ['.wxml', '.js'] : type === 'vue' ? ['.vue', '.js', '.jsx'] : ['.html', '.htm', '.js', '.ts'];
 const files = collectFiles(targetDir, exts);
 const allIssues = [];
 
