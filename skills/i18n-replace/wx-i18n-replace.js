@@ -509,7 +509,7 @@ class WxI18nReplacer {
       if (stats.isDirectory()) {
         // 跳过特殊目录
         if (file.startsWith('.')) continue;
-        if (['node_modules', 'miniprogram_npm', 'dist', 'build'].includes(file)) continue;
+        if (['node_modules', 'miniprogram_npm', 'dist', 'build', 'vendor', 'third_party', 'third-party', 'libs'].includes(file)) continue;
         if (this.exclude.some(pattern => file === pattern || fullPath.includes(pattern))) continue;
         await this.processDirectory(fullPath);
       } else {
@@ -605,23 +605,22 @@ class WxI18nReplacer {
 
     // 优先读取 .js 格式
     if (fs.existsSync(jsPath)) {
+      const content = fs.readFileSync(jsPath, 'utf-8');
       try {
-        const content = fs.readFileSync(jsPath, 'utf-8');
         const jsonStr = content.replace(/^module\.exports\s*=\s*/, '').replace(/\s*;?\s*$/, '');
         return JSON.parse(jsonStr);
       } catch (e) {
-        console.warn(`[警告] 无法解析 ${jsPath}: ${e.message}`);
-        return {};
+        throw new Error(`语言文件解析失败: ${jsPath}\n  原因: ${e.message}\n  已有翻译可能丢失，请先手动修复文件`);
       }
     }
 
     // 兼容旧版 .json 格式
     if (fs.existsSync(jsonPath)) {
+      const content = fs.readFileSync(jsonPath, 'utf-8');
       try {
-        return JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+        return JSON.parse(content);
       } catch (e) {
-        console.warn(`[警告] 无法解析 ${jsonPath}: ${e.message}`);
-        return {};
+        throw new Error(`语言文件解析失败: ${jsonPath}\n  原因: ${e.message}\n  已有翻译可能丢失，请先手动修复文件`);
       }
     }
 

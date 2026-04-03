@@ -318,6 +318,9 @@ class I18nSyncer {
       return;
     }
 
+    // 保存修改前的快照（用于 writeLangFile 安全检查）
+    const snapshot = { ...existingTranslations };
+
     // 构建待翻译数据（只含新条目，值为空）
     const pendingData = {};
     for (const text of pendingTexts) {
@@ -325,8 +328,8 @@ class I18nSyncer {
       pendingData[text] = '';
     }
 
-    // 写入完整语言文件（带安全检查，保护已有翻译）
-    this.writeLangFile(this.lang, existingTranslations, existingTranslations);
+    // 写入完整语言文件（带安全检查，用修改前快照对比）
+    this.writeLangFile(this.lang, existingTranslations, snapshot);
 
     // 写入 pending 文件（只含待翻译条目，供 i18n-text agent 使用）
     const pendingPath = this.writePendingFile(this.lang, pendingData);
@@ -405,7 +408,18 @@ i18n 翻译同步工具
     return;
   }
 
-  const targetPath = args.find(a => !a.startsWith('--') && args.indexOf(a) === 0) || args[0];
+  // 找第一个位置参数（跳过 flag 及其值）
+  const flagsWithValues = ['--i18n-dir', '--lang', '--type'];
+  const targetPath = (() => {
+    for (let i = 0; i < args.length; i++) {
+      if (args[i].startsWith('--')) {
+        if (flagsWithValues.includes(args[i])) i++;
+        continue;
+      }
+      return args[i];
+    }
+    return null;
+  })();
 
   if (!targetPath || targetPath.startsWith('--')) {
     console.error('错误: 请提供目标路径');
