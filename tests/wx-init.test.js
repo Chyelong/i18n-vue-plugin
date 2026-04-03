@@ -28,7 +28,9 @@ describe('i18n-init --type wx', () => {
     assert.ok(i18nJs.includes('global.$t'), 'i18n.js should have global.$t');
     assert.ok(i18nJs.includes('global._i18nLang'), 'i18n.js should have global._i18nLang');
     assert.ok(i18nJs.includes('loadRemoteLocale'), 'i18n.js should have loadRemoteLocale');
-    assert.ok(i18nJs.includes("require('./tw.json')"), 'i18n.js should require local tw.json');
+    // 小程序不支持 require .json，必须用 .js
+    assert.ok(i18nJs.includes("require('./tw.js')"), 'i18n.js should require tw.js (not .json)');
+    assert.ok(!i18nJs.includes("require('./tw.json')"), 'i18n.js should NOT require tw.json');
 
     // Check i18n-behavior.js exists
     const behaviorJs = fs.readFileSync(path.join(targetDir, 'i18n-behavior.js'), 'utf-8');
@@ -36,7 +38,11 @@ describe('i18n-init --type wx', () => {
     assert.ok(behaviorJs.includes('$t'), 'should inject $t');
     assert.ok(behaviorJs.includes('global._i18nLang'), 'should read from global._i18nLang');
 
-    // Check tw.json exists
-    assert.ok(fs.existsSync(path.join(targetDir, 'tw.json')), 'tw.json should exist');
+    // Check tw.js exists (not .json — 小程序 require 不支持 .json)
+    const twJsPath = path.join(targetDir, 'tw.js');
+    assert.ok(fs.existsSync(twJsPath), 'tw.js should exist');
+    const twContent = fs.readFileSync(twJsPath, 'utf-8');
+    assert.ok(twContent.startsWith('module.exports = '), 'tw.js should use module.exports format');
+    assert.ok(!fs.existsSync(path.join(targetDir, 'tw.json')), 'tw.json should NOT exist for wx type');
   });
 });

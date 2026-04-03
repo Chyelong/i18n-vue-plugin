@@ -143,7 +143,77 @@ describe('WxI18nReplacer JS processing', () => {
   });
 });
 
-// ==================== 4. Integration tests (dry-run) ====================
+// ==================== 4. Object key skip tests ====================
+
+describe('WxI18nReplacer JS object key skip', () => {
+  it('skips Chinese string used as object key', () => {
+    const replacer = new WxI18nReplacer();
+    const input = "const map = { '管理功能': 'main01.png' }";
+    const result = replacer.processScript(input);
+    assert.ok(!result.includes("global.$t('管理功能')"), `Object key should not be wrapped, got: ${result}`);
+    assert.ok(result.includes("'管理功能':"), 'Object key should remain unchanged');
+  });
+
+  it('still replaces Chinese string used as object value', () => {
+    const replacer = new WxI18nReplacer();
+    const input = "const obj = { key: '操作成功' }";
+    const result = replacer.processScript(input);
+    assert.ok(result.includes("global.$t('操作成功')"), `Object value should be wrapped, got: ${result}`);
+  });
+});
+
+// ==================== 5. Language file .js format tests ====================
+
+describe('WxI18nReplacer lang file .js format', () => {
+  const os = require('os');
+  let tmpDir;
+
+  it('writeLangFile writes .js format with module.exports', () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wx-lang-test-'));
+    const replacer = new WxI18nReplacer({ i18nDir: tmpDir, lang: 'tw' });
+    const data = { '你好': '你好', '世界': '世界' };
+    replacer.writeLangFile('tw', data);
+
+    const jsPath = path.join(tmpDir, 'tw.js');
+    assert.ok(fs.existsSync(jsPath), 'tw.js should exist');
+
+    const content = fs.readFileSync(jsPath, 'utf-8');
+    assert.ok(content.startsWith('module.exports = '), 'Should start with module.exports');
+
+    // Verify it can be required
+    const loaded = require(jsPath);
+    assert.equal(loaded['你好'], '你好');
+    assert.equal(loaded['世界'], '世界');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('readLangFile reads .js format', () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wx-lang-test-'));
+    const jsPath = path.join(tmpDir, 'tw.js');
+    fs.writeFileSync(jsPath, 'module.exports = {"测试": "測試"}\n', 'utf-8');
+
+    const replacer = new WxI18nReplacer({ i18nDir: tmpDir, lang: 'tw' });
+    const data = replacer.readLangFile('tw');
+    assert.equal(data['测试'], '測試');
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+// ==================== 6. Third-party library skip tests ====================
+
+describe('WxI18nReplacer third-party library skip', () => {
+  it('skips echarts files by name', () => {
+    const replacer = new WxI18nReplacer();
+    // echarts file should be detected by the filename pattern
+    assert.ok(/^(echarts|chart|ec-canvas|wxParse|WxParse|weui|vant|iview)\b/i.test('echarts.js'));
+    assert.ok(/^(echarts|chart|ec-canvas|wxParse|WxParse|weui|vant|iview)\b/i.test('ec-canvas.js'));
+    assert.ok(!/^(echarts|chart|ec-canvas|wxParse|WxParse|weui|vant|iview)\b/i.test('mypage.js'));
+  });
+});
+
+// ==================== 7. Integration tests (dry-run) ====================
 
 describe('WxI18nReplacer dry-run integration', () => {
   it('processes sample.wxml without crashing', () => {

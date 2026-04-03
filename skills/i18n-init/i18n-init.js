@@ -837,7 +837,7 @@ const I18N_WX_TEMPLATE = `/**
  * 翻译函数挂载到 global 对象
  */
 
-const localLang = require('./{{defaultLang}}.json')
+const localLang = require('./{{defaultLang}}.js')
 global._i18nLang = localLang
 global._i18nLocale = '{{defaultLang}}'
 
@@ -962,18 +962,24 @@ class I18nInitializer {
 
   generateLangFiles(dir) {
     for (const lang of this.langs) {
-      const filePath = path.join(dir, `${lang}.json`);
+      // 小程序用 .js 格式（require 不支持 .json），其他类型用 .json
+      const isWx = this.type === 'wx';
+      const ext = isWx ? '.js' : '.json';
+      const filePath = path.join(dir, `${lang}${ext}`);
 
       if (fs.existsSync(filePath)) {
-        console.log(`跳过 (已存在): ${lang}.json`);
+        console.log(`跳过 (已存在): ${lang}${ext}`);
         continue;
       }
 
-      // 空对象，待 vue-i18n-replace.js 执行时填充
       const example = {};
 
-      fs.writeFileSync(filePath, JSON.stringify(example, null, 2), 'utf-8');
-      console.log(`生成: ${lang}.json`);
+      if (isWx) {
+        fs.writeFileSync(filePath, `module.exports = ${JSON.stringify(example, null, 2)}\n`, 'utf-8');
+      } else {
+        fs.writeFileSync(filePath, JSON.stringify(example, null, 2), 'utf-8');
+      }
+      console.log(`生成: ${lang}${ext}`);
     }
 
   }

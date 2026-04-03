@@ -316,6 +316,13 @@ class WxI18nReplacer {
           return match;
         }
 
+        // ===== 对象 key 跳过（踩坑经验：{ global.$t('中文'): value } 是语法错误）=====
+        const afterMatch = line.substring(matchIndex + match.length);
+        if (/^\s*:(?!:)/.test(afterMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: '对象 key（函数调用不能作为 key）', line: line.trim() });
+          return match;
+        }
+
         // 处理包含 HTML 标签的字符串
         if (/<[^>]+>/.test(text)) {
           let hasHtmlChange = false;
@@ -507,8 +514,10 @@ class WxI18nReplacer {
         await this.processDirectory(fullPath);
       } else {
         if (this.exclude.some(pattern => file === pattern || fullPath.includes(pattern))) continue;
-        // 跳过压缩文件
+        // 跳过压缩文件和第三方库（踩坑经验：echarts 等库被替换后无法正常工作）
         if (file.endsWith('.min.js')) continue;
+        if (/^(echarts|chart|ec-canvas|wxParse|WxParse|weui|vant|iview)\b/i.test(file)) continue;
+        if (/vendor|third[_-]?party|lib[s]?[/\\]/i.test(fullPath)) continue;
         const ext = path.extname(file).toLowerCase();
         if (WXML_EXTS.includes(ext) || JS_EXTS.includes(ext)) {
           await this.processFile(fullPath);
@@ -587,31 +596,65 @@ class WxI18nReplacer {
   // ==================== 语言包 ====================
 
   /**
-   * 读取现有语言文件
+   * 读取现有语言文件（优先 .js，兼容 .json）
+   * 小程序不支持 require('.json')，语言包统一用 .js（module.exports = {...}）
    */
   readLangFile(lang) {
-    const filePath = path.join(this.i18nDir, `${lang}.json`);
-    if (fs.existsSync(filePath)) {
+    const jsPath = path.join(this.i18nDir, `${lang}.js`);
+    const jsonPath = path.join(this.i18nDir, `${lang}.json`);
+
+    // 优先读取 .js 格式
+    if (fs.existsSync(jsPath)) {
       try {
-        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        const content = fs.readFileSync(jsPath, 'utf-8');
+        const jsonStr = content.replace(/^module\.exports\s*=\s*/, '').replace(/\s*;?\s*$/, '');
+        return JSON.parse(jsonStr);
       } catch (e) {
-        console.warn(`[警告] 无法解析 ${filePath}: ${e.message}`);
+        console.warn(`[警告] 无法解析 ${jsPath}: ${e.message}`);
         return {};
       }
     }
+
+    // 兼容旧版 .json 格式
+    if (fs.existsSync(jsonPath)) {
+      try {
+        return JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+      } catch (e) {
+        console.warn(`[警告] 无法解析 ${jsonPath}: ${e.message}`);
+        return {};
+      }
+    }
+
     return {};
   }
 
   /**
-   * 写入语言文件
+   * 写入语言文件（.js 格式：module.exports = {...}）
+   * 小程序 require 不支持 .json，必须用 .js
+   * 写入后自动验证文件能否正常加载（防双引号转义等致命问题）
    */
   writeLangFile(lang, data) {
-    const filePath = path.join(this.i18nDir, `${lang}.json`);
     if (!fs.existsSync(this.i18nDir)) {
       fs.mkdirSync(this.i18nDir, { recursive: true });
     }
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-    console.log(`[已写入] ${filePath} (${Object.keys(data).length} 条翻译)`);
+
+    const jsPath = path.join(this.i18nDir, `${lang}.js`);
+    const jsonContent = JSON.stringify(data, null, 2);
+    const jsContent = `module.exports = ${jsonContent}\n`;
+    fs.writeFileSync(jsPath, jsContent, 'utf-8');
+    console.log(`[已写入] ${jsPath} (${Object.keys(data).length} 条翻译)`);
+
+    // 验证写入的 .js 文件能否正常加载（踩坑经验：双引号转义会导致整个文件加载失败）
+    try {
+      const absPath = path.resolve(jsPath);
+      delete require.cache[absPath];
+      require(absPath);
+      console.log(`[验证通过] ${jsPath} 加载正常`);
+    } catch (e) {
+      console.error(`[严重警告] ${jsPath} 加载失败！所有页面翻译将显示空白！`);
+      console.error(`  原因: ${e.message}`);
+      console.error(`  请检查文件中是否有未转义的引号（如中文双引号 "" ）`);
+    }
   }
 
   /**
@@ -649,6 +692,36 @@ class WxI18nReplacer {
 
     this.writeLangFile(this.lang, existingTranslations);
     console.log(`已添加 ${newTexts.length} 条新文本（翻译值留空，请使用 i18n-text agent 进行翻译）`);
+  }
+
+  /**
+   * 验证 WXML 中引用的 $t key 是否都存在于语言包中
+   * 踩坑经验：WXML 的 {{$t['key']}} 无回退机制，key 不存在时显示空白而非原文
+   */
+  validateWxmlKeys() {
+    const langData = this.readLangFile(this.lang);
+    const missingKeys = [];
+
+    for (const wxmlPath of this.wxmlReplacedFiles) {
+      const content = fs.readFileSync(wxmlPath, 'utf-8');
+      const keyRegex = /\$t\['([^']+)'\]/g;
+      let m;
+      while ((m = keyRegex.exec(content)) !== null) {
+        const key = m[1];
+        if (!(key in langData) && !this.extractedTexts.has(key)) {
+          missingKeys.push({ file: wxmlPath, key });
+        }
+      }
+    }
+
+    if (missingKeys.length > 0) {
+      console.log(`\n[警告] WXML 中有 ${missingKeys.length} 个 key 在语言包中不存在（会显示空白）：`);
+      const unique = [...new Set(missingKeys.map(m => m.key))];
+      unique.slice(0, 10).forEach(k => console.log(`  缺失: "${k}"`));
+      if (unique.length > 10) console.log(`  ... 还有 ${unique.length - 10} 个`);
+    }
+
+    return missingKeys;
   }
 
   /**
@@ -690,6 +763,15 @@ class WxI18nReplacer {
     if (this.behaviorInjectedCount > 0) {
       console.log(`\nBehavior 注入: ${this.behaviorInjectedCount} 个文件`);
     }
+
+    // 实战验证清单
+    const langFilePath = path.relative('.', path.join(this.i18nDir, this.lang + '.js'));
+    console.log('\n=== 验证清单（基于实战踩坑经验）===');
+    console.log('  1. 验证语言包加载: node -e "require(\'./' + langFilePath + '\')"');
+    console.log('  2. WXML key 缺失检查: 已自动执行（见上方警告）');
+    console.log('  3. 对象 key 误替换: grep -r "global.\\$t(" --include="*.js" | grep ": "');
+    console.log('  4. 模板字符串拆断: grep -rn "global.\\$t(" --include="*.js" | grep "\\${"');
+    console.log('  5. 翻译后验证条目数: 确保翻译前后 key 数量一致（大文件翻译可能丢条目）');
   }
 }
 
@@ -772,8 +854,11 @@ async function main() {
 
   const replacer = new WxI18nReplacer(options);
   await replacer.process(targetPath);
-  replacer.outputSummary();
   replacer.saveExtractedTexts();
+  if (!options.dryRun) {
+    replacer.validateWxmlKeys();
+  }
+  replacer.outputSummary();
 
   console.log('\n替换完成！请使用 i18n-text agent 子代理进行翻译。');
 }
