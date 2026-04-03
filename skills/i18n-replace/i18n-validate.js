@@ -129,18 +129,37 @@ function fixBareT(filePath) {
   return count;
 }
 
+/**
+ * 读取语言包文件（支持 .js 和 .json 格式）
+ * wx 项目用 .js（module.exports = {...}），其他用 .json
+ */
+function readLangData(i18nDirPath, langCode) {
+  const jsPath = path.join(i18nDirPath, `${langCode}.js`);
+  const jsonPath = path.join(i18nDirPath, `${langCode}.json`);
+
+  if (fs.existsSync(jsPath)) {
+    const content = fs.readFileSync(jsPath, 'utf-8');
+    const jsonStr = content.replace(/^module\.exports\s*=\s*/, '').replace(/\s*;?\s*$/, '');
+    return { data: JSON.parse(jsonStr), filePath: jsPath };
+  }
+  if (fs.existsSync(jsonPath)) {
+    return { data: JSON.parse(fs.readFileSync(jsonPath, 'utf-8')), filePath: jsonPath };
+  }
+  return null;
+}
+
 function validateTranslationJSON(i18nDirPath, langCode) {
   const issues = [];
-  const filePath = path.join(i18nDirPath, `${langCode}.json`);
-  if (!fs.existsSync(filePath)) {
-    issues.push({ severity: '🟠', name: '翻译文件不存在', content: filePath });
-    return issues;
-  }
   let data;
   try {
-    data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const result = readLangData(i18nDirPath, langCode);
+    if (!result) {
+      issues.push({ severity: '🟠', name: '翻译文件不存在', content: `${langCode}.json / ${langCode}.js` });
+      return issues;
+    }
+    data = result.data;
   } catch (e) {
-    issues.push({ severity: '🔴', name: 'JSON 解析失败', content: e.message });
+    issues.push({ severity: '🔴', name: '语言包解析失败', content: e.message });
     return issues;
   }
 
@@ -165,10 +184,12 @@ function validateTranslationJSON(i18nDirPath, langCode) {
 }
 
 function detectSuspiciousKeys(i18nDirPath, langCode) {
-  const filePath = path.join(i18nDirPath, `${langCode}.json`);
-  if (!fs.existsSync(filePath)) return [];
   let data;
-  try { data = JSON.parse(fs.readFileSync(filePath, 'utf-8')); } catch { return []; }
+  try {
+    const result = readLangData(i18nDirPath, langCode);
+    if (!result) return [];
+    data = result.data;
+  } catch { return []; }
   const suspicious = [];
   const VENDOR_TEXTS = ['首页', '上一页', '下一页', '末页', '加载中', '拖拽对象无效', '确定', '取消', '提示'];
   for (const key of Object.keys(data)) {

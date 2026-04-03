@@ -178,7 +178,9 @@ prompt: 扫描项目，生成全项目 i18n 完成状态文件树和分块任务
 - Vue/browser/esm：检查 `index.js`（或 `index.ts`）
 - wx（微信小程序）：检查 `i18n.js`
 
-- **已有完整配置**（核心文件 + 目标语言.json 都存在）→ 跳过此步骤（zh.json 不要求，源语言即中文）
+- **已有完整配置**（核心文件 + 目标语言包都存在）→ 跳过此步骤（zh 不要求，源语言即中文）
+  - Vue/browser：检查 `<lang>.json`
+  - wx：检查 `<lang>.js`（小程序不支持 require .json）
 - **缺少任一文件** → 调用 `/i18n-init` skill：
 
 ```bash
@@ -214,7 +216,7 @@ require('./i18n/i18n.js')
 `app.js` 的 `onLaunch` 中插入（注释状态，上线时取消注释改 URL）：
 ```javascript
 // [i18n] 上线时取消注释并修改为云端地址
-// await global.loadRemoteLocale('https://your-api.com/i18n/tw.json', 'tw')
+// await global.loadRemoteLocale('https://your-api.com/i18n/tw.js', 'tw')
 ```
 
 **初始化后必检（静态项目）：**
@@ -294,13 +296,15 @@ node <plugin-path>/skills/i18n-replace/i18n-validate.js <target-dir> --type <vue
 
 ### 步骤 4：翻译语言包
 
-派发 `i18n-text` 子代理：
+派发 `i18n-text` 子代理。注意语言包文件格式：
+- Vue/browser 项目：`<lang>.json`（标准 JSON）
+- wx 项目：`<lang>.js`（`module.exports = {...}` 格式，读取时去掉 `module.exports = ` 前缀按 JSON 解析，写回时加回前缀）
 
 ```
 subagent: i18n-text
 model: haiku
-task: 翻译 i18n JSON
-prompt: 读取 <i18n-dir>/<lang>.json，将所有值为空字符串的条目翻译为<目标语言>。这是一个<type>项目的 UI 界面翻译，中文 key 是源文本。翻译要求：准确、简洁、符合 UI 场景（按钮用祈使语气、标签用名词、提示信息用完整句子）。保留插值变量 {xxx}、HTML 标签和转义符不变。翻译完成后直接写回文件。
+task: 翻译 i18n 语言包
+prompt: 读取 <i18n-dir>/<lang文件>（Vue/browser 为 .json，wx 为 .js），将所有值为空字符串的条目翻译为<目标语言>。这是一个<type>项目的 UI 界面翻译，中文 key 是源文本。翻译要求：准确、简洁、符合 UI 场景（按钮用祈使语气、标签用名词、提示信息用完整句子）。保留插值变量 {xxx}、HTML 标签和转义符不变。翻译完成后直接写回文件。如果是 .js 格式，写回时保持 module.exports = {...} 格式。
 ```
 
 如有多个目标语言，为每个语言分别派发子代理，可并行执行。

@@ -21,8 +21,14 @@ tools: Read, Write, Glob
 > - ❌ 不修改 JSON 文件的 key 结构
 > - ❌ 不翻译插值变量、HTML 标签、转义符
 > - ❌ 不使用 Edit / Bash 工具
-> - ✅ 只读取和写入 i18n 目录下的 JSON 语言包文件
+> - ✅ 只读取和写入 i18n 目录下的语言包文件（.json 或 .js）
 > - ✅ 只翻译字符串类型的 value
+>
+> **文件格式说明：**
+> - Vue/browser 项目：`<lang>.json`（标准 JSON）
+> - 微信小程序（wx）项目：`<lang>.js`（`module.exports = {...}` 格式）
+>   - 读取时去掉 `module.exports = ` 前缀，按 JSON 解析
+>   - 写回时加回 `module.exports = ` 前缀 + 末尾换行
 
 ---
 
