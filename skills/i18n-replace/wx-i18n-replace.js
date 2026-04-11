@@ -57,6 +57,12 @@ const {
   INDEX_MATCH_REGEX,
   STORAGE_KEY_REGEX_BASE,
   WX_STORAGE_REGEX,
+  BODY_FIELD_REGEX,
+  MODE_FIELD_REGEX,
+  CHECK_OPERATE_NAME_REGEX,
+  DUAL_USE_FIELD_REGEX,
+  EVENTBUS_REGEX,
+  ROUTER_NAME_REGEX,
 } = require('./shared-patterns');
 
 class WxI18nReplacer {
@@ -313,6 +319,42 @@ class WxI18nReplacer {
         }
         if (INDEX_MATCH_REGEX.test(beforeMatch)) {
           this.skippedLogic.push({ file: this.currentFile, text, reason: 'indexOf/includes 匹配值（可能匹配后端数据）', line: line.trim() });
+          return match;
+        }
+
+        // B1: body 字段（支付协议）
+        if (BODY_FIELD_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: 'body 字段（支付协议，不翻译）', line: line.trim() });
+          return match;
+        }
+
+        // B2: $mode 业务标识
+        if (MODE_FIELD_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: '$mode 业务标识（不翻译）', line: line.trim() });
+          return match;
+        }
+
+        // B3: checkOperate name 参数
+        if (CHECK_OPERATE_NAME_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: 'checkOperate name 参数（内部用 indexOf 匹配原文）', line: line.trim() });
+          return match;
+        }
+
+        // B4: 双用途字段赋值
+        if (DUAL_USE_FIELD_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: '双用途字段赋值（后端数据层不翻译）', line: line.trim() });
+          return match;
+        }
+
+        // B6: EventBus 事件名
+        if (EVENTBUS_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: 'EventBus 事件名', line: line.trim() });
+          return match;
+        }
+
+        // B7: 路由 name / showRouter
+        if (ROUTER_NAME_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: '路由标识符（$router name / showRouter）', line: line.trim() });
           return match;
         }
 

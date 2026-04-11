@@ -27,6 +27,73 @@ describe('replace-bugs sanity', () => {
   });
 });
 
+describe('B1 wx: body field should be skipped', () => {
+  it('body: "中文" should not be wrapped', () => {
+    const replacer = new WxI18nReplacer({ dryRun: true });
+    replacer.currentFile = 'test.js';
+    const input = readFixture('wx/B1-body-field.js');
+    const output = replacer.processScript(input);
+    assert.match(output, /body:\s*['"]包时套餐充值['"]/);
+    assert.doesNotMatch(output, /body:\s*global\.\$t/);
+  });
+});
+
+describe('B2 wx: $mode field should be skipped', () => {
+  it('$mode: "中文" should not be wrapped', () => {
+    const replacer = new WxI18nReplacer({ dryRun: true });
+    replacer.currentFile = 'test.js';
+    const input = readFixture('wx/B2-dollar-mode.js');
+    const output = replacer.processScript(input);
+    assert.match(output, /\$mode:\s*['"]买赠['"]/);
+    assert.doesNotMatch(output, /\$mode:\s*global\.\$t/);
+  });
+});
+
+describe('B3 wx: checkOperate name should be skipped', () => {
+  it('checkOperate({ name: "中文" }) should not be wrapped', () => {
+    const replacer = new WxI18nReplacer({ dryRun: true });
+    replacer.currentFile = 'test.js';
+    const input = readFixture('wx/B3-check-operate.js');
+    const output = replacer.processScript(input);
+    assert.match(output, /name:\s*['"]订座['"]/);
+    assert.doesNotMatch(output, /name:\s*global\.\$t\(['"]订座/);
+  });
+});
+
+describe('B4 wx: dual-use field should be skipped', () => {
+  it('tag_name/tag_box_name/recharge_tag_name = "中文" should not be wrapped', () => {
+    const replacer = new WxI18nReplacer({ dryRun: true });
+    replacer.currentFile = 'test.js';
+    const input = readFixture('wx/B4-dual-use-field.js');
+    const output = replacer.processScript(input);
+    assert.match(output, /tag_name\s*=\s*['"]组合套餐['"]/);
+    assert.doesNotMatch(output, /tag_name\s*=\s*global\.\$t/);
+  });
+});
+
+describe('B6 wx: EventBus event name should be skipped', () => {
+  it('EventBus.on/$bus.emit("中文") should not be wrapped', () => {
+    const replacer = new WxI18nReplacer({ dryRun: true });
+    replacer.currentFile = 'test.js';
+    const input = readFixture('wx/B6-eventbus.js');
+    const output = replacer.processScript(input);
+    assert.match(output, /EventBus\.on\(['"]订单支付成功['"]/);
+    assert.match(output, /\$bus\.emit\(['"]用户登录['"]/);
+    assert.doesNotMatch(output, /EventBus\.on\(\s*global\.\$t/);
+  });
+});
+
+describe('B7 wx: showRouter name should be skipped', () => {
+  it('showRouter("中文") should not be wrapped', () => {
+    const replacer = new WxI18nReplacer({ dryRun: true });
+    replacer.currentFile = 'test.js';
+    const input = readFixture('wx/B7-router-name.js');
+    const output = replacer.processScript(input);
+    assert.match(output, /showRouter\(['"]充值页面['"]/);
+    assert.doesNotMatch(output, /showRouter\(\s*global\.\$t/);
+  });
+});
+
 describe('B1 Vue: body field should be skipped', () => {
   it('body: "中文" should not be wrapped', () => {
     const replacer = new VueI18nReplacer({ dryRun: true });
