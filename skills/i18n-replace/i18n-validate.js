@@ -55,37 +55,7 @@ if (!targetDir || targetDir.startsWith('-') || process.argv.includes('--help')) 
 
 // ===== Patterns =====
 
-const VUE_PATTERNS = [
-  { regex: /case\s+.*\$t\s*\(/,                       severity: '🔴', name: 'switch case 中 $t' },
-  { regex: /[=!]==?\s*\$t\s*\(/,                      severity: '🔴', name: '等值比较中 $t' },
-  { regex: /\$t\s*\([^)]*\)\s*[=!]==?/,               severity: '🔴', name: '$t 后等值比较' },
-  { regex: /\.(?:indexOf|includes)\s*\(\s*\$t\s*\(/,  severity: '🔴', name: 'indexOf/includes 中 $t' },
-  { regex: /\$router.*name.*\$t\s*\(/,                severity: '🟠', name: '路由 name 中 $t' },
-  { regex: /showRouter\s*\(.*\$t/,                    severity: '🟠', name: 'showRouter 中 $t' },
-  { regex: /(?:habit|localStorage).*\$t\s*\(/,        severity: '🟠', name: '存储键中 $t' },
-  { regex: /(?:EventBus|\$bus).*\$t\s*\(/,            severity: '🟠', name: 'EventBus 中 $t' },
-  { regex: /el-tab-pane[^>]*:name=.*\$t/,             severity: '🟡', name: 'el-tab name 中 $t' },
-  { regex: /:prop=.*\$t\s*\(/,                        severity: '🟡', name: 'el-table prop 中 $t' },
-];
-
-const HTML_PATTERNS = [
-  { regex: /<option[^>]*data-i18n-value/,              severity: '🔴', name: 'option value 标记' },
-  { regex: /type=["']hidden["'][^>]*data-i18n/,        severity: '🔴', name: 'hidden input 标记' },
-  { regex: /data-i18n-data-/,                          severity: '🟠', name: 'data-* 业务属性' },
-  { regex: /data-i18n-value=/,                         severity: '🟠', name: 'value 属性标记' },
-  { regex: /querySelector.*\$t\s*\(/,                  severity: '🟡', name: 'querySelector 中 $t' },
-];
-
-const WX_PATTERNS = [
-  { regex: /case\s+.*global\.\$t\s*\(/,                              severity: '🔴', name: 'switch case 中 global.$t' },
-  { regex: /[=!]==?\s*global\.\$t\s*\(/,                             severity: '🔴', name: '等值比较中 global.$t' },
-  { regex: /global\.\$t\s*\([^)]*\)\s*[=!]==?/,                     severity: '🔴', name: 'global.$t 后等值比较' },
-  { regex: /\.(?:indexOf|includes)\s*\(\s*global\.\$t\s*\(/,         severity: '🔴', name: 'indexOf/includes 中 global.$t' },
-  { regex: /wx\.(?:set|get|remove)Storage.*global\.\$t\s*\(/,        severity: '🟠', name: 'wx 存储键中 global.$t' },
-  { regex: /wx\.(?:navigateTo|redirectTo).*global\.\$t\s*\(/,        severity: '🟠', name: 'wx 路由参数中 global.$t' },
-  { regex: /\[.*global\.\$t\s*\(/,                                   severity: '🟡', name: '方括号访问中 global.$t' },
-  { regex: /global\.\$t\s*\([^)]*\)\s*:/,                            severity: '🔴', name: '对象 key 中 global.$t' },
-];
+const { getRulesForType } = require('./validate-rules');
 
 // ===== Scan Functions =====
 
@@ -239,7 +209,7 @@ const type = projectType === 'auto'
       ? 'wx'
       : fs.existsSync(path.join(targetDir, 'src')) ? 'vue' : 'html')
   : projectType;
-const patterns = type === 'wx' ? WX_PATTERNS : type === 'vue' ? VUE_PATTERNS : HTML_PATTERNS;
+const patterns = getRulesForType(type);
 const exts = type === 'wx' ? ['.wxml', '.js'] : type === 'vue' ? ['.vue', '.js', '.jsx'] : ['.html', '.htm', '.js', '.ts'];
 const files = collectFiles(targetDir, exts);
 const allIssues = [];
