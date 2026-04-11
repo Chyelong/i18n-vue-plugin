@@ -65,6 +65,39 @@ const A_RULES_COMMON = [
     description: '双重翻译，内层返回值已是翻译后文本，外层找不到 key',
     fix: '只保留一层 $t()'
   },
+  {
+    id: 'A4', category: 'pattern', scope: 'all',
+    regex: /\bbody\s*:\s*(?:window\.|global\.)?\$t\s*\(/,
+    severity: '🔴',
+    name: 'body 字段被 $t 包裹（支付协议）',
+    description: 'body 是支付网关订单描述字段，翻译后对账/退款失败',
+    fix: 'body 保持原始中文或模板字符串拼接'
+  },
+  {
+    id: 'A5', category: 'pattern', scope: 'all',
+    regex: /\$mode\s*:\s*(?:window\.|global\.)?\$t\s*\(/,
+    severity: '🔴',
+    name: '$mode 业务标识被 $t 包裹',
+    description: '$mode 用于 storage/逻辑判断，翻译后比较失败',
+    fix: '$mode 保持原始中文'
+  },
+  {
+    id: 'A6', category: 'pattern', scope: 'all',
+    regex: /checkOperate\s*\([^)]*name\s*:\s*(?:window\.|global\.)?\$t/,
+    severity: '🔴',
+    name: 'checkOperate name 参数被 $t 包裹',
+    description: 'checkOperate 内部用 indexOf 匹配原始中文（TM_h5 项目惯例，可配置禁用）',
+    fix: 'name 参数保持原始中文',
+    projectSpecific: true
+  },
+  {
+    id: 'A7', category: 'pattern', scope: 'all',
+    regex: /res\.(?:msg|message)\.indexOf\s*\(\s*(?:window\.|global\.)?\$t/,
+    severity: '🔴',
+    name: 'res.msg.indexOf 中 $t',
+    description: '后端 msg 是中文，翻译后匹配失败',
+    fix: '用 res.code 数值判断或保持原始中文'
+  },
 ];
 
 // ===== Phase 1 新增：wx 专有规则 =====

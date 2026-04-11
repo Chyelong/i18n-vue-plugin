@@ -84,4 +84,57 @@ describe('Phase 1 rules', () => {
       assert.doesNotMatch(negative, rule.regex);
     });
   });
+
+  describe('A4 - body 字段协议', () => {
+    const rule = findRule('A4');
+    it('rule exists', () => {
+      assert.ok(rule);
+      assert.equal(rule.severity, '🔴');
+    });
+    it('matches body: $t(...)', () => {
+      const positive = "  body: window.$t('包时套餐'),";
+      assert.match(positive, rule.regex);
+    });
+    it('does not match body-like key', () => {
+      const negative = "  bodyLabel: window.$t('描述'),";
+      assert.doesNotMatch(negative, rule.regex);
+    });
+  });
+
+  describe('A5 - $mode 业务标识', () => {
+    const rule = findRule('A5');
+    it('rule exists', () => {
+      assert.ok(rule);
+    });
+    it('matches $mode: $t(...)', () => {
+      const positive = "  $mode: window.$t('买赠'),";
+      assert.match(positive, rule.regex);
+    });
+  });
+
+  describe('A6 - checkOperate name 参数', () => {
+    const rule = findRule('A6');
+    it('rule exists', () => {
+      assert.ok(rule);
+    });
+    it('matches checkOperate name with $t', () => {
+      const positive = "checkOperate({ name: window.$t('订座'), foo: 1 })";
+      assert.match(positive, rule.regex);
+    });
+  });
+
+  describe('A7 - res.msg.indexOf($t)', () => {
+    const rule = findRule('A7');
+    it('rule exists', () => {
+      assert.ok(rule);
+    });
+    it('matches res.msg.indexOf', () => {
+      const positive = "if (res.msg.indexOf($t('成功')) > -1) {}";
+      assert.match(positive, rule.regex);
+    });
+    it('matches res.message.indexOf', () => {
+      const positive = "if (res.message.indexOf(window.$t('成功')) > -1) {}";
+      assert.match(positive, rule.regex);
+    });
+  });
 });
