@@ -170,7 +170,7 @@ Fetch and follow instructions from https://raw.githubusercontent.com/Chyelong/i1
 /reload-plugins
 ```
 
-## i18n-validate 审核脚本（v2.6.0 起）
+## i18n-validate 审核脚本（v2.6.1 起）
 
 新版审核分成两层：
 
@@ -201,6 +201,30 @@ node skills/i18n-replace/i18n-validate.js src/ --type vue --i18n-dir src/i18n --
 **退出码**：`0` 全绿 / `1` 有 🔴 严重 / `2` 有 🟠 高危 / `3` 脚本错误
 
 报告每条命中带规则 ID（如 `[V01]`、`[A4]`），规则详情查 `skills/i18n-replace/validate-rules.js` 或 `docs/superpowers/specs/2026-04-11-audit-system-upgrade-design.md`。
+
+## 替换脚本事前预防（v2.6.1 起）
+
+为减少 validator 反复报错的负担，vue/wx/html 替换脚本在源头做了更全面的预防扫描：
+
+**已修复的脚本 bug（v2.6.1）**：
+
+- Vue/HTML 脚本不再把 HTML 注释吞进 `$t()` / `data-i18n`
+- Vue 脚本把跨行模板文本合并为单行（避免 Vue 2 buble `Unterminated string constant`）
+- Vue 脚本对含双引号的文本用智能包裹（`smartQuoteAndWrap`），避开 `\"` 转义陷阱
+
+**三脚本统一的源头跳过规则（v2.6.1）**：
+
+| 规则 | 触发位置 | 说明 |
+|------|---------|------|
+| body 字段 | `body: '中文'` | 支付网关订单描述，翻译后对账失败 |
+| $mode 字段 | `$mode: '中文'` | 业务标识，用于 storage/逻辑判断 |
+| checkOperate name | `checkOperate({ name: '中文' })` | 内部用 indexOf 匹配原文 |
+| 双用途字段 | `tag_name/tag_box_name/recharge_tag_name = '中文'` | 同时用于后端数据和 UI 展示 |
+| 对象字面量 key | `{ '中文': value }` | JS 语法：对象 key 不能是函数调用 |
+| EventBus 事件名 | `$bus.on/emit('中文')` | 跨文件配对必须一致 |
+| 路由 name | `$router.push({ name: '中文' })`、`showRouter('中文')` | 路由技术标识符 |
+
+这些规则被替换脚本识别后会保留原始中文字符串，并在 `skippedLogic` 中输出原因供审查。
 
 ## 支持的项目类型
 
