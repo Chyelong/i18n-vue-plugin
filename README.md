@@ -170,6 +170,38 @@ Fetch and follow instructions from https://raw.githubusercontent.com/Chyelong/i1
 /reload-plugins
 ```
 
+## i18n-validate 审核脚本（v2.6.0 起）
+
+新版审核分成两层：
+
+1. **脚本层 `skills/i18n-replace/i18n-validate.js`** — 机械化高危模式扫描 + 翻译质量检查，输出结构化 JSON
+2. **Agent 层 `agents/i18n-code.md`** — 读取 validator 产出的 JSON，对每条命中做语义判断（confirmed / falsePositive / needsContext）
+
+### 内置规则（38+ 条）
+
+| 分类 | 数量 | 说明 |
+|------|-----|------|
+| V01-V10 | 10 | Vue 项目高危模式（switch、等值、路由 name、habit 等） |
+| W01-W08 | 8  | 微信小程序高危模式（`global.$t` 前缀） |
+| H01-H05 | 5  | 静态 HTML/JS（`data-i18n-value` 等） |
+| A1-A14  | 14 | 跨类型踩坑（对象 key、嵌套 $t、`body`、`$mode`、HTML 注释残留、弯引号、￥/¥ 等） |
+| C1-C4   | 4  | 翻译质量（变量名保护、简繁漂移、重复值、空值白名单） |
+
+### 用法
+
+```bash
+# 文本报告（默认）
+node skills/i18n-replace/i18n-validate.js src/ --type vue --i18n-dir src/i18n --lang tw
+
+# JSON 报告（供 agent 审核使用）
+node skills/i18n-replace/i18n-validate.js src/ --type vue --i18n-dir src/i18n --lang tw \
+  --format json --out .i18n-issues.json
+```
+
+**退出码**：`0` 全绿 / `1` 有 🔴 严重 / `2` 有 🟠 高危 / `3` 脚本错误
+
+报告每条命中带规则 ID（如 `[V01]`、`[A4]`），规则详情查 `skills/i18n-replace/validate-rules.js` 或 `docs/superpowers/specs/2026-04-11-audit-system-upgrade-design.md`。
+
 ## 支持的项目类型
 
 | 类型 | 文件 | 替换方式 | 初始化核心文件 |
