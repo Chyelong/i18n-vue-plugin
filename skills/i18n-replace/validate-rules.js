@@ -46,6 +46,32 @@ const WX_RULES = [
   { id: 'W08', category: 'pattern', scope: 'wx', regex: /global\.\$t\s*\([^)]*\)\s*:/,                            severity: '🔴', name: '对象 key 中 global.$t',        description: '对象 key 不能是函数调用', fix: '改为计算属性 [global.$t("...")]' },
 ];
 
+// ===== Phase 1 新增：通用高危规则（A 类，跨项目类型）=====
+
+const A_RULES_COMMON = [
+  {
+    id: 'A1', category: 'pattern', scope: 'all',
+    regex: /^\s*(?:window\.|global\.)?\$t\s*\([^)]*\)\s*:/,
+    severity: '🔴',
+    name: '对象字面量 key 用 $t()',
+    description: 'JS 对象字面量 key 不能是函数调用，会导致 SyntaxError',
+    fix: '改为计算属性 [window.$t("...")]: value'
+  },
+  {
+    id: 'A2', category: 'pattern', scope: 'all',
+    regex: /(?:window\.|global\.)?\$t\s*\(\s*(?:window\.|global\.)?\$t\s*\(/,
+    severity: '🔴',
+    name: '嵌套 $t($t(...))',
+    description: '双重翻译，内层返回值已是翻译后文本，外层找不到 key',
+    fix: '只保留一层 $t()'
+  },
+];
+
+// 把 A 类规则同时追加到三种项目类型
+VUE_RULES.push(...A_RULES_COMMON);
+WX_RULES.push(...A_RULES_COMMON);
+HTML_RULES.push(...A_RULES_COMMON);
+
 function getRulesForType(type) {
   if (type === 'vue')  return VUE_RULES;
   if (type === 'wx')   return WX_RULES;
@@ -57,4 +83,4 @@ function findRule(id) {
   return [...VUE_RULES, ...HTML_RULES, ...WX_RULES].find(r => r.id === id);
 }
 
-module.exports = { VUE_RULES, HTML_RULES, WX_RULES, getRulesForType, findRule };
+module.exports = { VUE_RULES, HTML_RULES, WX_RULES, A_RULES_COMMON, getRulesForType, findRule };
