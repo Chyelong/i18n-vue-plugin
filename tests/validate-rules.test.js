@@ -1,5 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
 const { findRule } = require('../skills/i18n-replace/validate-rules');
 
 describe('Phase 1 rules', () => {
@@ -190,5 +191,17 @@ describe('Phase 1 rules', () => {
       const negative = "// HTML_COMMENT is a concept";
       assert.doesNotMatch(negative, rule.regex);
     });
+  });
+});
+
+describe('A13 - JSON 弯引号未转义', () => {
+  const fixturePath = path.join(__dirname, 'fixtures/validate-phase1/translations');
+  const { detectCurlyQuotes } = require('../skills/i18n-replace/i18n-validate');
+
+  it('detects curly quotes in JSON file', () => {
+    const issues = detectCurlyQuotes(path.join(fixturePath, 'with-curly-quotes.json'));
+    assert.ok(issues.length > 0, 'should detect at least one curly quote');
+    assert.equal(issues[0].severity, '🟠');
+    assert.equal(issues[0].name, 'JSON 弯引号未转义');
   });
 });

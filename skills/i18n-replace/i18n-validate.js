@@ -18,41 +18,6 @@
 const fs = require('fs');
 const path = require('path');
 
-// ===== CLI =====
-
-function getArgValue(name, defaultVal) {
-  const idx = process.argv.indexOf(name);
-  return idx !== -1 && process.argv[idx + 1] ? process.argv[idx + 1] : defaultVal;
-}
-
-const targetDir = process.argv[2];
-const projectType = getArgValue('--type', 'auto');
-const i18nDir = getArgValue('--i18n-dir', './src/i18n');
-const lang = getArgValue('--lang', 'tw');
-const checkTranslation = process.argv.includes('--check-translation');
-const checkJson = process.argv.includes('--check-json');
-const fixMode = process.argv.includes('--fix');
-
-if (!targetDir || targetDir.startsWith('-') || process.argv.includes('--help')) {
-  console.log(`i18n 验证脚本
-
-用法：
-  node i18n-validate.js <directory> [options]
-
-选项：
-  --type <vue|html|wx>    项目类型 (默认: 自动检测)
-  --i18n-dir <path>       i18n 目录路径 (默认: ./src/i18n)
-  --lang <lang>           目标语言 (默认: tw)
-  --check-translation     仅检查翻译 JSON 质量
-  --check-json            仅检查 JSON 可疑条目
-  --fix                   自动修复裸 $t() → window.$t()
-
-退出码：
-  0  全部通过
-  1  存在 🔴 严重 或 🟠 高危 问题`);
-  process.exit(0);
-}
-
 // ===== Patterns =====
 
 const { getRulesForType } = require('./validate-rules');
@@ -184,6 +149,29 @@ function detectSuspiciousKeys(i18nDirPath, langCode) {
   return suspicious;
 }
 
+/**
+ * A13: 扫描 JSON 源文本中未转义的中文弯引号（U+201C / U+201D）
+ * 期望用 \u201C / \u201D 转义（避免 WXML 等上下文中解析歧义）
+ */
+function detectCurlyQuotes(jsonFilePath) {
+  const issues = [];
+  if (!fs.existsSync(jsonFilePath)) return issues;
+  const content = fs.readFileSync(jsonFilePath, 'utf-8');
+  const lines = content.split('\n');
+  lines.forEach((line, idx) => {
+    if (/[\u201C\u201D]/.test(line) && !line.includes('\\u201C') && !line.includes('\\u201D')) {
+      issues.push({
+        file: jsonFilePath,
+        line: idx + 1,
+        severity: '🟠',
+        name: 'JSON 弯引号未转义',
+        content: line.trim().substring(0, 120)
+      });
+    }
+  });
+  return issues;
+}
+
 // ===== File Collection =====
 
 function collectFiles(dir, exts) {
@@ -202,73 +190,125 @@ function collectFiles(dir, exts) {
   return results;
 }
 
-// ===== Main =====
+// ===== 模块导出（供测试使用）=====
 
-const type = projectType === 'auto'
-  ? (fs.existsSync(path.join(targetDir, 'app.json')) && !fs.existsSync(path.join(targetDir, 'src'))
-      ? 'wx'
-      : fs.existsSync(path.join(targetDir, 'src')) ? 'vue' : 'html')
-  : projectType;
-const patterns = getRulesForType(type);
-const exts = type === 'wx' ? ['.wxml', '.js'] : type === 'vue' ? ['.vue', '.js', '.jsx'] : ['.html', '.htm', '.js', '.ts'];
-const files = collectFiles(targetDir, exts);
-const allIssues = [];
+module.exports = {
+  scanFile,
+  detectBareT,
+  fixBareT,
+  readLangData,
+  validateTranslationJSON,
+  detectSuspiciousKeys,
+  detectCurlyQuotes,
+  collectFiles,
+};
 
-// Code scan
-if (!checkTranslation && !checkJson) {
-  for (const f of files) {
-    allIssues.push(...scanFile(f, patterns));
-    if (type === 'vue' && f.endsWith('.vue')) {
-      const content = fs.readFileSync(f, 'utf-8');
-      if (fixMode) {
-        const count = fixBareT(f);
-        if (count > 0) console.log(`  🔧 修复 ${count} 处裸 $t(): ${f}`);
-      } else {
-        allIssues.push(...detectBareT(f, content));
+// ===== Main (CLI mode) =====
+
+if (require.main === module) {
+  function getArgValue(name, defaultVal) {
+    const idx = process.argv.indexOf(name);
+    return idx !== -1 && process.argv[idx + 1] ? process.argv[idx + 1] : defaultVal;
+  }
+
+  const targetDir = process.argv[2];
+  const projectType = getArgValue('--type', 'auto');
+  const i18nDir = getArgValue('--i18n-dir', './src/i18n');
+  const lang = getArgValue('--lang', 'tw');
+  const checkTranslation = process.argv.includes('--check-translation');
+  const checkJson = process.argv.includes('--check-json');
+  const fixMode = process.argv.includes('--fix');
+
+  if (!targetDir || targetDir.startsWith('-') || process.argv.includes('--help')) {
+    console.log(`i18n 验证脚本
+
+用法：
+  node i18n-validate.js <directory> [options]
+
+选项：
+  --type <vue|html|wx>    项目类型 (默认: 自动检测)
+  --i18n-dir <path>       i18n 目录路径 (默认: ./src/i18n)
+  --lang <lang>           目标语言 (默认: tw)
+  --check-translation     仅检查翻译 JSON 质量
+  --check-json            仅检查 JSON 可疑条目
+  --fix                   自动修复裸 $t() → window.$t()
+
+退出码：
+  0  全部通过
+  1  存在 🔴 严重 或 🟠 高危 问题`);
+    process.exit(0);
+  }
+
+  const type = projectType === 'auto'
+    ? (fs.existsSync(path.join(targetDir, 'app.json')) && !fs.existsSync(path.join(targetDir, 'src'))
+        ? 'wx'
+        : fs.existsSync(path.join(targetDir, 'src')) ? 'vue' : 'html')
+    : projectType;
+  const patterns = getRulesForType(type);
+  const exts = type === 'wx' ? ['.wxml', '.js'] : type === 'vue' ? ['.vue', '.js', '.jsx'] : ['.html', '.htm', '.js', '.ts'];
+  const files = collectFiles(targetDir, exts);
+  const allIssues = [];
+
+  // Code scan
+  if (!checkTranslation && !checkJson) {
+    for (const f of files) {
+      allIssues.push(...scanFile(f, patterns));
+      if (type === 'vue' && f.endsWith('.vue')) {
+        const content = fs.readFileSync(f, 'utf-8');
+        if (fixMode) {
+          const count = fixBareT(f);
+          if (count > 0) console.log(`  🔧 修复 ${count} 处裸 $t(): ${f}`);
+        } else {
+          allIssues.push(...detectBareT(f, content));
+        }
       }
     }
   }
-}
 
-// Translation quality
-if (checkTranslation || (!checkJson && !checkTranslation)) {
-  allIssues.push(...validateTranslationJSON(i18nDir, lang));
-}
-
-// Suspicious JSON entries
-if (checkJson) {
-  const suspicious = detectSuspiciousKeys(i18nDir, lang);
-  if (suspicious.length > 0) {
-    console.log(`\n🟡 可疑 JSON 条目 (${suspicious.length}):`);
-    suspicious.forEach(s => console.log(`  "${s.key}" — ${s.reason}`));
+  // Translation quality
+  if (checkTranslation || (!checkJson && !checkTranslation)) {
+    allIssues.push(...validateTranslationJSON(i18nDir, lang));
+    const langResult = readLangData(i18nDir, lang);
+    if (langResult) {
+      allIssues.push(...detectCurlyQuotes(langResult.filePath));
+    }
   }
-  if (suspicious.length === 0) {
-    console.log('\n✅ 未发现可疑 JSON 条目');
+
+  // Suspicious JSON entries
+  if (checkJson) {
+    const suspicious = detectSuspiciousKeys(i18nDir, lang);
+    if (suspicious.length > 0) {
+      console.log(`\n🟡 可疑 JSON 条目 (${suspicious.length}):`);
+      suspicious.forEach(s => console.log(`  "${s.key}" — ${s.reason}`));
+    }
+    if (suspicious.length === 0) {
+      console.log('\n✅ 未发现可疑 JSON 条目');
+    }
   }
-}
 
-// Report
-console.log(`\n=== i18n 验证报告 ===`);
-console.log(`📁 路径: ${targetDir}  📋 类型: ${type}  🔍 文件: ${files.length}`);
+  // Report
+  console.log(`\n=== i18n 验证报告 ===`);
+  console.log(`📁 路径: ${targetDir}  📋 类型: ${type}  🔍 文件: ${files.length}`);
 
-const grouped = { '🔴': [], '🟠': [], '🟡': [] };
-for (const i of allIssues) {
-  if (grouped[i.severity]) grouped[i.severity].push(i);
-}
-
-for (const [sev, items] of Object.entries(grouped)) {
-  if (items.length > 0) {
-    console.log(`\n${sev} (${items.length}):`);
-    items.slice(0, 20).forEach(i => {
-      const loc = i.file ? `  ${i.file}${i.line ? ':' + i.line : ''}` : '  ';
-      console.log(`${loc}  ${i.name} — ${i.content || ''}`);
-    });
-    if (items.length > 20) console.log(`  ... 及其他 ${items.length - 20} 处`);
+  const grouped = { '🔴': [], '🟠': [], '🟡': [] };
+  for (const i of allIssues) {
+    if (grouped[i.severity]) grouped[i.severity].push(i);
   }
-}
 
-const hasProblems = grouped['🔴'].length > 0 || grouped['🟠'].length > 0;
-console.log(`\n=== 总结 ===`);
-console.log(`🔴 ${grouped['🔴'].length}  🟠 ${grouped['🟠'].length}  🟡 ${grouped['🟡'].length}`);
-console.log(hasProblems ? '退出码: 1 (存在严重/高危问题)' : '退出码: 0 (全部通过)');
-process.exit(hasProblems ? 1 : 0);
+  for (const [sev, items] of Object.entries(grouped)) {
+    if (items.length > 0) {
+      console.log(`\n${sev} (${items.length}):`);
+      items.slice(0, 20).forEach(i => {
+        const loc = i.file ? `  ${i.file}${i.line ? ':' + i.line : ''}` : '  ';
+        console.log(`${loc}  ${i.name} — ${i.content || ''}`);
+      });
+      if (items.length > 20) console.log(`  ... 及其他 ${items.length - 20} 处`);
+    }
+  }
+
+  const hasProblems = grouped['🔴'].length > 0 || grouped['🟠'].length > 0;
+  console.log(`\n=== 总结 ===`);
+  console.log(`🔴 ${grouped['🔴'].length}  🟠 ${grouped['🟠'].length}  🟡 ${grouped['🟡'].length}`);
+  console.log(hasProblems ? '退出码: 1 (存在严重/高危问题)' : '退出码: 0 (全部通过)');
+  process.exit(hasProblems ? 1 : 0);
+}
