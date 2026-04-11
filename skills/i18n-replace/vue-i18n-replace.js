@@ -183,7 +183,7 @@ class VueI18nReplacer {
       if (/^(['"`])[\u4e00-\u9fa5]+(\1)$/.test(trimmed)) {
         const text = trimmed.slice(1, -1);
         this.recordText(text);
-        return `{{ $t('${this.escapeQuote(text)}') }}`;
+        return `{{ ${this.smartQuoteAndWrap(text)} }}`;
       }
 
       // 如果是复杂的 JS 表达式（带三元、模板字符串等）
@@ -209,7 +209,7 @@ class VueI18nReplacer {
         const normalizedText = text.replace(/\s+/g, ' ').trim();
         this.recordText(normalizedText);
         hasChange = true;
-        return `$t('${this.escapeQuote(normalizedText)}')`;
+        return this.smartQuoteAndWrap(normalizedText);
       });
 
       return hasChange ? `{{${newCode}}}` : match;
@@ -242,7 +242,7 @@ class VueI18nReplacer {
         this.recordText(literalText);
         hasChange = true;
         // 始终用单引号包裹，避免 Vue 2 buble 编译器 \" 转义问题
-        return `$t('${this.escapeQuote(literalText)}')`;
+        return this.smartQuoteAndWrap(literalText);
       });
 
       if (hasChange) {
@@ -265,7 +265,7 @@ class VueI18nReplacer {
       this.recordText(value);
 
       // 静态转动态：添加冒号，整体包裹 (template 中不能用 window)
-      return `${prefix}:${attr}="$t('${this.escapeQuote(value)}')"`;
+      return `${prefix}:${attr}="${this.smartQuoteAndWrap(value)}"`;
     });
 
     // 第四步：处理标签内的静态文本 >文字<
@@ -314,7 +314,7 @@ class VueI18nReplacer {
           const partTrimmed = seg.value.trim();
           if (!partTrimmed || !HAS_CHINESE.test(partTrimmed)) return seg.value;
           this.recordText(partTrimmed);
-          return `{{ $t('${this.escapeQuote(partTrimmed)}') }}`;
+          return `{{ ${this.smartQuoteAndWrap(partTrimmed)} }}`;
         });
         return `>${leadingSpace}${parts.join('')}${trailingSpace}<`;
       }
@@ -325,7 +325,7 @@ class VueI18nReplacer {
       const leadingSpace = text.match(/^\s*/)[0];
       const trailingSpace = text.match(/\s*$/)[0];
 
-      return `>${leadingSpace}{{ $t('${this.escapeQuote(trimmed)}') }}${trailingSpace}<`;
+      return `>${leadingSpace}{{ ${this.smartQuoteAndWrap(trimmed)} }}${trailingSpace}<`;
     });
 
     // 还原 HTML 注释
@@ -378,7 +378,7 @@ class VueI18nReplacer {
         this.recordText(trimmedPart);
         const partLeading = part.value.match(/^\s*/)[0];
         const partTrailing = part.value.match(/\s*$/)[0];
-        return `${partLeading}{{ $t('${this.escapeQuote(trimmedPart)}') }}${partTrailing}`;
+        return `${partLeading}{{ ${this.smartQuoteAndWrap(trimmedPart)} }}${partTrailing}`;
       }
     });
 
@@ -393,6 +393,41 @@ class VueI18nReplacer {
       .replace(/\\/g, '\\\\')  // 先转义反斜杠
       .replace(/'/g, "\\'")
       .replace(/"/g, '\\"');
+  }
+
+  /**
+   * 把 ASCII 双引号 (") 转换为中文弯引号 (U+201C/U+201D)
+   * 策略：交替左右弯引号（奇数左引号，偶数右引号）
+   */
+  convertAsciiDoubleQuotes(text) {
+    let open = true;
+    return text.replace(/"/g, () => {
+      const ch = open ? '\u201C' : '\u201D';
+      open = !open;
+      return ch;
+    });
+  }
+
+  /**
+   * A3 fix: 根据文本内容智能选择包裹引号，避免 Vue 2 buble \" 报错
+   * - 同时含 ' 和 "：把 " 转成中文弯引号，用单引号包裹
+   * - 其他情况：用单引号包裹，单引号转义
+   * @param {string} text  待包裹文本
+   * @param {string} prefix  'window.' / ''
+   * @returns {string}  完整 $t('...') 表达式
+   */
+  smartQuoteAndWrap(text, prefix = '') {
+    const hasSingle = text.includes("'");
+    const hasDouble = text.includes('"');
+    let body = text;
+
+    if (hasSingle && hasDouble) {
+      body = this.convertAsciiDoubleQuotes(body);
+    }
+
+    // 此时 body 要么不含 "，要么只含 "（弯引号），都用单引号包裹
+    const escaped = body.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return `${prefix}$t('${escaped}')`;
   }
 
   /**
@@ -506,7 +541,7 @@ class VueI18nReplacer {
               // 保留前后空白
               const leadingSpace = innerText.match(/^\s*/)[0];
               const trailingSpace = innerText.match(/\s*$/)[0];
-              return `>${leadingSpace}\${${prefix}$t('${this.escapeQuote(trimmedInner)}')}${trailingSpace}<`;
+              return `>${leadingSpace}\${${this.smartQuoteAndWrap(trimmedInner, prefix)}}${trailingSpace}<`;
             }
             return htmlMatch;
           });
@@ -523,8 +558,7 @@ class VueI18nReplacer {
         this.recordText(text);
 
         // 使用中文作为 key（script 区域始终使用 window.$t）
-        const replacement = `$t('${this.escapeQuote(text)}')`;
-        return `window.${replacement}`;
+        return this.smartQuoteAndWrap(text, 'window.');
       });
     });
 
@@ -583,7 +617,7 @@ class VueI18nReplacer {
 
     if (varMappings.length === 0) {
       const normalizedOriginal = text.replace(/\s+/g, ' ').trim();
-      return `${prefix}$t('${this.escapeQuote(normalizedOriginal)}')`;
+      return this.smartQuoteAndWrap(normalizedOriginal, prefix);
     }
 
     // 生成参数对象

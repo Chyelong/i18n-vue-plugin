@@ -27,6 +27,33 @@ describe('replace-bugs sanity', () => {
   });
 });
 
+describe('A3 Vue: smart quote wrapping avoids \\" escape', () => {
+  it('strings with only " are wrapped in single quotes without escaping', () => {
+    const replacer = new VueI18nReplacer({ dryRun: true });
+    replacer.currentFile = 'test.vue';
+    const input = readFixture('vue/A3-curly-quotes.vue');
+    const output = replacer.processVueFile(input);
+
+    // 反例：不应出现 \" 转义（Vue 2 buble 不支持）
+    assert.doesNotMatch(output, /\\"/,
+      'Escaped double quote \\" is forbidden (Vue 2 buble incompatible)');
+
+    // 正例：script 区 tip 的 $t 应该用单引号包裹，ASCII " 不需转义
+    assert.match(output, /window\.\$t\('请输入"昵称"'\)/,
+      'Single-quoted $t() should contain unescaped ASCII "');
+  });
+
+  it('strings with both \' and " convert " to curly quotes', () => {
+    const replacer = new VueI18nReplacer({ dryRun: true });
+    replacer.currentFile = 'test.vue';
+    // 手工测试 smartQuoteAndWrap 的 both-quotes 分支
+    const result = replacer.smartQuoteAndWrap(`I'm "happy" today`, 'window.');
+    // 有 ' 和 " 同时出现 → 把 " 转为中文弯引号
+    assert.match(result, /window\.\$t\('I\\'m \u201Chappy\u201D today'\)/,
+      'both quotes present should convert " to curly');
+  });
+});
+
 describe('A2 Vue: multiline text must be collapsed to single line', () => {
   it('$t() content should not contain newlines', () => {
     const replacer = new VueI18nReplacer({ dryRun: true });
