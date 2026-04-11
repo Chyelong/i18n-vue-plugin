@@ -32,7 +32,17 @@ function scanFile(filePath, patterns) {
     if (line.trim().startsWith('//') || line.trim().startsWith('*')) return;
     for (const p of patterns) {
       if (p.regex.test(line)) {
-        issues.push({ file: filePath, line: idx + 1, content: line.trim().substring(0, 120), severity: p.severity, name: p.name });
+        issues.push({
+          id: p.id,
+          category: p.category || 'pattern',
+          file: filePath,
+          line: idx + 1,
+          content: line.trim().substring(0, 120),
+          severity: p.severity,
+          name: p.name,
+          description: p.description,
+          fix: p.fix
+        });
       }
     }
   });
@@ -414,6 +424,8 @@ if (require.main === module) {
   const checkTranslation = process.argv.includes('--check-translation');
   const checkJson = process.argv.includes('--check-json');
   const fixMode = process.argv.includes('--fix');
+  const outputFormat = getArgValue('--format', 'text');
+  const outFile = getArgValue('--out', null);
 
   if (!targetDir || targetDir.startsWith('-') || process.argv.includes('--help')) {
     console.log(`i18n 验证脚本
@@ -428,10 +440,14 @@ if (require.main === module) {
   --check-translation     仅检查翻译 JSON 质量
   --check-json            仅检查 JSON 可疑条目
   --fix                   自动修复裸 $t() → window.$t()
+  --format <text|json>    输出格式 (默认: text)
+  --out <file>            写入文件 (默认: stdout)
 
 退出码：
   0  全部通过
-  1  存在 🔴 严重 或 🟠 高危 问题`);
+  1  存在 🔴 严重问题
+  2  存在 🟠 高危问题（无 🔴）
+  3  脚本自身错误`);
     process.exit(0);
   }
 
@@ -489,28 +505,67 @@ if (require.main === module) {
   }
 
   // Report
-  console.log(`\n=== i18n 验证报告 ===`);
-  console.log(`📁 路径: ${targetDir}  📋 类型: ${type}  🔍 文件: ${files.length}`);
-
   const grouped = { '🔴': [], '🟠': [], '🟡': [] };
   for (const i of allIssues) {
     if (grouped[i.severity]) grouped[i.severity].push(i);
   }
+  const summary = {
+    files: files.length,
+    critical: grouped['🔴'].length,
+    high: grouped['🟠'].length,
+    warning: grouped['🟡'].length
+  };
 
-  for (const [sev, items] of Object.entries(grouped)) {
-    if (items.length > 0) {
-      console.log(`\n${sev} (${items.length}):`);
-      items.slice(0, 20).forEach(i => {
-        const loc = i.file ? `  ${i.file}${i.line ? ':' + i.line : ''}` : '  ';
-        console.log(`${loc}  ${i.name} — ${i.content || ''}`);
-      });
-      if (items.length > 20) console.log(`  ... 及其他 ${items.length - 20} 处`);
+  // 退出码分级：0 全绿 / 1 有🔴 / 2 有🟠无🔴 / 3 脚本错误
+  let exitCode = 0;
+  if (summary.critical > 0) exitCode = 1;
+  else if (summary.high > 0) exitCode = 2;
+
+  if (outputFormat === 'json') {
+    const report = {
+      projectPath: targetDir,
+      projectType: type,
+      stats: summary,
+      issues: allIssues.map(i => ({
+        id: i.id || null,
+        category: i.category || 'pattern',
+        severity: i.severity,
+        rule: i.name,
+        description: i.description || null,
+        file: i.file || null,
+        line: i.line || null,
+        snippet: i.content || null,
+        fix: i.fix || null
+      }))
+    };
+    const jsonStr = JSON.stringify(report, null, 2);
+    if (outFile) {
+      fs.writeFileSync(outFile, jsonStr, 'utf-8');
+      console.log(`报告已写入 ${outFile}`);
+    } else {
+      console.log(jsonStr);
     }
+  } else {
+    console.log(`\n=== i18n 验证报告 ===`);
+    console.log(`📁 路径: ${targetDir}  📋 类型: ${type}  🔍 文件: ${files.length}`);
+
+    for (const [sev, items] of Object.entries(grouped)) {
+      if (items.length > 0) {
+        console.log(`\n${sev} (${items.length}):`);
+        items.slice(0, 20).forEach(i => {
+          const loc = i.file ? `  ${i.file}${i.line ? ':' + i.line : ''}` : '  ';
+          const ruleId = i.id ? `[${i.id}] ` : '';
+          console.log(`${loc}  ${ruleId}${i.name} — ${i.content || ''}`);
+        });
+        if (items.length > 20) console.log(`  ... 及其他 ${items.length - 20} 处`);
+      }
+    }
+
+    console.log(`\n=== 总结 ===`);
+    console.log(`🔴 ${summary.critical}  🟠 ${summary.high}  🟡 ${summary.warning}`);
+    const codeLabel = { 0: '0 (全部通过)', 1: '1 (存在🔴严重问题)', 2: '2 (存在🟠高危问题)' }[exitCode];
+    console.log(`退出码: ${codeLabel}`);
   }
 
-  const hasProblems = grouped['🔴'].length > 0 || grouped['🟠'].length > 0;
-  console.log(`\n=== 总结 ===`);
-  console.log(`🔴 ${grouped['🔴'].length}  🟠 ${grouped['🟠'].length}  🟡 ${grouped['🟡'].length}`);
-  console.log(hasProblems ? '退出码: 1 (存在严重/高危问题)' : '退出码: 0 (全部通过)');
-  process.exit(hasProblems ? 1 : 0);
+  process.exit(exitCode);
 }

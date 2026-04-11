@@ -15,10 +15,10 @@
  */
 
 const VUE_RULES = [
-  { id: 'V01', category: 'pattern', scope: 'vue', regex: /case\s+.*\$t\s*\(/,                       severity: '🔴', name: 'switch case 中 $t',       description: 'case 值来自后端，翻译后匹配失败', fix: 'case 值改回原始中文字面量' },
-  { id: 'V02', category: 'pattern', scope: 'vue', regex: /[=!]==?\s*\$t\s*\(/,                      severity: '🔴', name: '等值比较中 $t',          description: '与后端数据比较，翻译后永远不等', fix: '比较值保持原始中文' },
-  { id: 'V03', category: 'pattern', scope: 'vue', regex: /\$t\s*\([^)]*\)\s*[=!]==?/,               severity: '🔴', name: '$t 后等值比较',         description: '与后端数据比较，翻译后永远不等', fix: '比较值保持原始中文' },
-  { id: 'V04', category: 'pattern', scope: 'vue', regex: /\.(?:indexOf|includes)\s*\(\s*\$t\s*\(/,  severity: '🔴', name: 'indexOf/includes 中 $t', description: '匹配后端响应内容，翻译后失败', fix: '匹配值保持原始中文' },
+  { id: 'V01', category: 'pattern', scope: 'vue', regex: /case\s+.*\$t\s*\(/,                                            severity: '🔴', name: 'switch case 中 $t',       description: 'case 值来自后端，翻译后匹配失败', fix: 'case 值改回原始中文字面量' },
+  { id: 'V02', category: 'pattern', scope: 'vue', regex: /[=!]==?\s*(?:window\.|this\.)?\$t\s*\(/,                        severity: '🔴', name: '等值比较中 $t',          description: '与后端数据比较，翻译后永远不等', fix: '比较值保持原始中文' },
+  { id: 'V03', category: 'pattern', scope: 'vue', regex: /(?:window\.|this\.)?\$t\s*\([^)]*\)\s*[=!]==?/,                 severity: '🔴', name: '$t 后等值比较',         description: '与后端数据比较，翻译后永远不等', fix: '比较值保持原始中文' },
+  { id: 'V04', category: 'pattern', scope: 'vue', regex: /\.(?:indexOf|includes)\s*\(\s*(?:window\.|this\.)?\$t\s*\(/,    severity: '🔴', name: 'indexOf/includes 中 $t', description: '匹配后端响应内容，翻译后失败', fix: '匹配值保持原始中文' },
   { id: 'V05', category: 'pattern', scope: 'vue', regex: /\$router.*name.*\$t\s*\(/,                severity: '🟠', name: '路由 name 中 $t',       description: '路由 name 是技术标识符', fix: '路由 name 保持原始中文或改 path' },
   { id: 'V06', category: 'pattern', scope: 'vue', regex: /showRouter\s*\(.*\$t/,                    severity: '🟠', name: 'showRouter 中 $t',      description: '权限/路由匹配标识符', fix: '参数保持原始中文' },
   { id: 'V07', category: 'pattern', scope: 'vue', regex: /(?:habit|localStorage).*\$t\s*\(/,        severity: '🟠', name: '存储键中 $t',           description: '持久化键翻译后读不到旧数据', fix: '存储键保持原始中文' },
