@@ -220,6 +220,89 @@ function scanYenUsageInCode(files) {
   return { fullwidth, halfwidth };
 }
 
+/**
+ * C1: 检测插值变量名本身被翻译
+ * key "等待{item_待上机}分钟" vs val "Wait {item_Awaiting} minutes"
+ * 变量名位置逐字符必须相同
+ */
+function detectVarNameTranslated(jsonFilePath) {
+  const issues = [];
+  let data;
+  try {
+    const content = fs.readFileSync(jsonFilePath, 'utf-8');
+    data = jsonFilePath.endsWith('.js')
+      ? JSON.parse(content.replace(/^module\.exports\s*=\s*/, '').replace(/\s*;?\s*$/, ''))
+      : JSON.parse(content);
+  } catch {
+    return issues;
+  }
+  const varRe = /\{([^}]+)\}/g;
+  for (const [key, val] of Object.entries(data)) {
+    if (typeof val !== 'string' || !val) continue;
+    const keyVars = [...key.matchAll(varRe)].map(m => m[1]);
+    const valVars = [...val.matchAll(varRe)].map(m => m[1]);
+    if (keyVars.length !== valVars.length) continue;
+    for (let i = 0; i < keyVars.length; i++) {
+      if (keyVars[i] !== valVars[i]) {
+        issues.push({
+          file: jsonFilePath,
+          severity: '🔴',
+          name: '插值变量名被翻译',
+          content: `"${key.substring(0, 40)}" 变量 {${keyVars[i]}} → {${valVars[i]}}`
+        });
+        break;
+      }
+    }
+  }
+  return issues;
+}
+
+/**
+ * C2: 检测 JSON key 简繁漂移
+ * 通过简单的繁→简映射表做归一化对比，若两个 key 归一化后相同，视为漂移
+ */
+const TRAD_TO_SIMP_MAP = {
+  '細': '细', '網': '网', '費': '费', '贈': '赠', '遊': '游',
+  '帳': '账', '戶': '户', '訂': '订', '單': '单', '統': '统', '計': '计', '頁': '页',
+  '確': '确', '認': '认', '設': '设', '備': '备', '電': '电', '話': '话', '際': '际',
+  '個': '个', '處': '处', '產': '产', '關': '关', '開': '开', '發': '发', '現': '现',
+  '實': '实', '點': '点', '檢': '检', '測': '测', '載': '载', '應': '应', '該': '该',
+  '資': '资', '數': '数', '據': '据', '類': '类', '別': '别', '體': '体', '樣': '样',
+};
+
+function normalizeForDrift(s) {
+  return [...s].map(c => TRAD_TO_SIMP_MAP[c] || c).join('');
+}
+
+function detectKeyDrift(jsonFilePath) {
+  const issues = [];
+  let data;
+  try {
+    const content = fs.readFileSync(jsonFilePath, 'utf-8');
+    data = jsonFilePath.endsWith('.js')
+      ? JSON.parse(content.replace(/^module\.exports\s*=\s*/, '').replace(/\s*;?\s*$/, ''))
+      : JSON.parse(content);
+  } catch {
+    return issues;
+  }
+  const keys = Object.keys(data);
+  const normalized = new Map();
+  for (const k of keys) {
+    const n = normalizeForDrift(k);
+    if (normalized.has(n) && normalized.get(n) !== k) {
+      issues.push({
+        file: jsonFilePath,
+        severity: '🟠',
+        name: 'JSON key 简繁漂移',
+        content: `"${normalized.get(n)}" 与 "${k}" 归一化后相同`
+      });
+    } else {
+      normalized.set(n, k);
+    }
+  }
+  return issues;
+}
+
 // ===== File Collection =====
 
 function collectFiles(dir, exts) {
@@ -250,6 +333,8 @@ module.exports = {
   detectCurlyQuotes,
   detectYenCoverage,
   scanYenUsageInCode,
+  detectVarNameTranslated,
+  detectKeyDrift,
   collectFiles,
 };
 
@@ -323,6 +408,8 @@ if (require.main === module) {
       allIssues.push(...detectCurlyQuotes(langResult.filePath));
       const codeUsage = scanYenUsageInCode(files);
       allIssues.push(...detectYenCoverage(langResult.filePath, codeUsage));
+      allIssues.push(...detectVarNameTranslated(langResult.filePath));
+      allIssues.push(...detectKeyDrift(langResult.filePath));
     }
   }
 

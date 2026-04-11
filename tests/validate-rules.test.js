@@ -223,3 +223,25 @@ describe('A14 - ￥/¥ 双字符映射', () => {
     assert.equal(issues.length, 0);
   });
 });
+
+describe('C1 - 插值变量名被翻译', () => {
+  const fixturePath = path.join(__dirname, 'fixtures/validate-phase1/translations');
+  const { detectVarNameTranslated } = require('../skills/i18n-replace/i18n-validate');
+
+  it('detects translated variable name', () => {
+    const issues = detectVarNameTranslated(path.join(fixturePath, 'var-name-translated.json'));
+    assert.ok(issues.length >= 1, 'should flag at least one translated variable name');
+    assert.ok(issues.some(i => i.name === '插值变量名被翻译'));
+  });
+});
+
+describe('C2 - JSON key 简繁漂移', () => {
+  const fixturePath = path.join(__dirname, 'fixtures/validate-phase1/translations');
+  const { detectKeyDrift } = require('../skills/i18n-replace/i18n-validate');
+
+  it('detects near-duplicate keys (simp/trad drift)', () => {
+    const issues = detectKeyDrift(path.join(fixturePath, 'key-drift.json'));
+    assert.ok(issues.length >= 1, 'should detect simp/trad key drift');
+    assert.ok(issues.some(i => i.name === 'JSON key 简繁漂移'));
+  });
+});
