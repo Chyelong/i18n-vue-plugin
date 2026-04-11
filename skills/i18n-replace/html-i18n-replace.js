@@ -706,7 +706,11 @@ async function main() {
   console.log('请使用 i18n-text agent 子代理完成翻译。');
 }
 
-main().catch((e) => {
-  console.error(`执行失败: ${e && e.message ? e.message : String(e)}`);
-  process.exit(1);
-});
+module.exports = { HtmlI18nReplacer };
+
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(`执行失败: ${e && e.message ? e.message : String(e)}`);
+    process.exit(1);
+  });
+}

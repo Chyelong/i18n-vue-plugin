@@ -944,7 +944,11 @@ Vue i18n 中文替换工具 (中文为键)
   console.log('\n替换完成！请使用 i18n-text agent 子代理进行翻译。');
 }
 
-main().catch((e) => {
-  console.error(`执行失败: ${e && e.message ? e.message : String(e)}`);
-  process.exit(1);
-});
+module.exports = { VueI18nReplacer };
+
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(`执行失败: ${e && e.message ? e.message : String(e)}`);
+    process.exit(1);
+  });
+}
