@@ -294,18 +294,24 @@ class HtmlI18nReplacer {
       // 已有 data-i18n 标记
       if (/data-i18n\s*=/.test(attrs)) return match;
 
-      const trimmed = text.trim();
-      if (!trimmed) return match;
+      // A1 fix: 剥离 HTML 注释占位符和换行，只保留纯中文文本
+      const stripped = text
+        .replace(/__HTML_COMMENT_\d+__/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!stripped) return match;
+      if (!HAS_CHINESE.test(stripped)) return match;
+
       // 包含引号或已被 i18n 处理
-      if (ALREADY_I18N.test(text)) return match;
-      if (text.includes('"') || text.includes("'")) return match;
-      // 含 Vue 插值 {{}} 的文本不能用 data-i18n（applyI18n 会覆盖 Vue 动态渲染）
-      if (/\{\{.*?\}\}/.test(text)) return match;
+      if (ALREADY_I18N.test(stripped)) return match;
+      if (stripped.includes('"') || stripped.includes("'")) return match;
+      // 含 Vue 插值 {{}} 的文本不能用 data-i18n
+      if (/\{\{.*?\}\}/.test(stripped)) return match;
 
-      this.recordText(trimmed);
+      this.recordText(stripped);
 
-      // 在开始标签的 > 前插入 data-i18n 属性
-      const newOpenTag = openTag.slice(0, -1) + ` data-i18n="${this.escapeAttr(trimmed)}">`;
+      // 在开始标签的 > 前插入 data-i18n 属性（只用 stripped 纯文本）
+      const newOpenTag = openTag.slice(0, -1) + ` data-i18n="${this.escapeAttr(stripped)}">`;
       return newOpenTag + text;
     });
 

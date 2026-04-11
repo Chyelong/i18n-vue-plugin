@@ -27,6 +27,31 @@ describe('replace-bugs sanity', () => {
   });
 });
 
+describe('A1 HTML: HTML comment must not enter data-i18n', () => {
+  it('data-i18n should contain only chinese text, not comment', () => {
+    const replacer = new HtmlI18nReplacer({ dryRun: true });
+    replacer.currentFile = 'test.html';
+    const input = readFixture('html/A1-html-comment.html');
+    const output = replacer.processHtmlFile(input);
+
+    // 反例：data-i18n 属性里不应含 <!--
+    assert.doesNotMatch(output, /data-i18n="[^"]*<!--/,
+      'data-i18n must not contain HTML comments');
+    assert.doesNotMatch(output, /data-i18n="[^"]*\n/,
+      'data-i18n must be single-line');
+    assert.doesNotMatch(output, /__HTML_COMMENT_\d+__/,
+      'No placeholder should leak');
+
+    // 正例：注释应保留
+    assert.match(output, /<!-- 这是注释 -->/,
+      'Comment should be preserved');
+
+    // 正例：纯文本部分应在 data-i18n 里
+    assert.match(output, /data-i18n="感谢您的支持"/,
+      'data-i18n should contain only the chinese text');
+  });
+});
+
 describe('A1 Vue: HTML comment should not be wrapped in $t()', () => {
   it('comment preserved outside $t, chinese wrapped', () => {
     const replacer = new VueI18nReplacer({ dryRun: true });
