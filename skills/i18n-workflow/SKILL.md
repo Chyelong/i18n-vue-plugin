@@ -46,10 +46,10 @@ digraph i18n_workflow {
     "scan" [shape=box, label="1. 检查 i18n-files 扫描报告\n不存在则自动执行 i18n-files agent"];
     "init" [shape=box, label="2. 调用 /i18n-init\n初始化 i18n 目录"];
     "replace" [shape=box, label="3. 调用替换脚本\nVue: vue-i18n-replace\nHTML/JS: html-i18n-replace"];
-    "verify" [shape=box, label="3.5. 高危验证扫描\nGrep 扫描 + 主线程修复"];
+    "validate" [shape=box, label="3.5. i18n-validate 脚本\n--format json 生成 .i18n-issues.json\n含 A/V/W/H 规则 + C 类翻译质量"];
     "translate" [shape=box, label="4. 派发 i18n-text 子代理\n翻译语言包"];
     "quality" [shape=box, label="4.5. 翻译质量检查\n变量一致性 + 空值 + JSON"];
-    "review" [shape=box, label="5. 派发 i18n-code 子代理\n审核替换结果"];
+    "review" [shape=box, label="5. 派发 i18n-code 子代理\n输入 issues.json\n返回 verdicts.json"];
     "loop" [shape=box, label="6. 审核循环\n未通过则修复后重审"];
     "pass?" [shape=diamond, label="审核通过?"];
     "report" [shape=box, label="向用户报告审核结果\n询问是否修复"];
@@ -61,8 +61,8 @@ digraph i18n_workflow {
     "detect" -> "scan";
     "scan" -> "init";
     "init" -> "replace";
-    "replace" -> "verify";
-    "verify" -> "translate";
+    "replace" -> "validate";
+    "validate" -> "translate";
     "translate" -> "quality";
     "quality" -> "review";
     "review" -> "loop";
@@ -249,50 +249,34 @@ node <i18n-replace-skill-directory>/wx-i18n-replace.js <目标路径> --i18n-dir
 - wx：WXML 中替换为 `{{$t['key']}}`，JS 中替换为 `global.$t()`，自动注入 i18n Behavior
 - 所有类型都会将中文 key 写入语言 JSON（翻译值留空）
 
-### 步骤 3.5：替换后高危验证扫描【不可跳过】
+### 步骤 3.5：运行 i18n-validate 脚本【不可跳过】
 
-替换脚本完成后，**必须**在主线程执行以下 Grep 扫描，自动发现并修复高危误替换：
+替换脚本完成后，**必须**在主线程执行 `i18n-validate.js`，它是一个内置 28+ 条高危规则的 Node 脚本（V01-V10 Vue、W01-W08 wx、H01-H05 HTML、A1-A14 跨类型、C1-C4 翻译质量）。
 
-**Vue 项目扫描（使用 Grep 工具，逐条执行）：**
-
-| # | 扫描模式 | 修复方式 |
-|---|---------|---------|
-| 1 | `case.*\$t\(` 或 `case.*window\.\$t\(` | 还原 case 值为原始中文 |
-| 2 | `(===?\s*\$t|===?\s*window\.\$t)` | 还原比较值为原始中文 |
-| 3 | `(indexOf|includes)\((window\.)?\$t` | 还原匹配值 |
-| 4 | `\$router.*name.*\$t\(` | 还原路由 name 为原始中文 |
-| 5 | `(habit|localStorage).*\$t\(` | 还原存储键 |
-| 6 | `EventBus.*\$t\(` | 还原事件名 |
-| 7 | `el-tab-pane.*:name=.*\$t` | 还原 tab name，用 slot="label" 包裹翻译文本 |
-| 8 | `:prop=.*\$t\(` | 还原 prop 为原始值 |
-| 9 | `showRouter.*\$t\(` | 还原 showRouter 参数 |
-
-**静态项目扫描：**
-
-| # | 扫描模式 | 修复方式 |
-|---|---------|---------|
-| 1 | `data-i18n-value=` | 删除 data-i18n-value 属性 |
-| 2 | `type="hidden".*data-i18n` | 删除 hidden input 上的 data-i18n |
-| 3 | `data-i18n-data-` | 删除业务 data-* 的 i18n 标记 |
-
-**执行规则：**
-- 每条 Grep 有命中 → 主线程直接修复（不派发子代理）
-- 全部扫描通过（0 命中）→ 继续步骤 4
-- 修复后重新执行对应的 Grep 确认归零
-
-**自动化扫描（推荐替代手动 grep）：**
+**执行命令：**
 
 ```bash
-node <plugin-path>/skills/i18n-replace/i18n-validate.js <target-dir> --type <vue|html> --i18n-dir <path> --lang <lang>
+node <plugin-path>/skills/i18n-replace/i18n-validate.js <target-dir> \
+  --type <vue|wx|html> \
+  --i18n-dir <path> \
+  --lang <lang> \
+  --format json \
+  --out <target-dir>/.i18n-issues.json
 ```
 
-- 退出码 0 → 全部通过，继续步骤 4
-- 退出码 1 → 主线程根据报告逐条修复，重新运行直到退出码 0
+**退出码规则：**
 
-**JSON 清理（验证脚本完成后）：**
-1. 运行 `i18n-validate.js --check-json` 检查翻译 JSON 中的可疑条目
-2. 删除来自第三方库的条目（如分页组件"首页""上一页"）
-3. 删除数据映射字段条目（如含管道符的混合字段）
+| code | 含义 | 下一步 |
+|------|------|--------|
+| 0 | 全绿（无任何问题） | **跳过步骤 5**，直接进入步骤 7 |
+| 1 | 存在 🔴 严重问题 | 继续步骤 5（派发 agent） |
+| 2 | 存在 🟠 高危问题（无 🔴） | 继续步骤 5（派发 agent） |
+| 3 | 脚本自身错误 | 报告用户并终止 |
+
+`.i18n-issues.json` 是**步骤 5 的输入**，主线程不要自行修复——让 i18n-code agent 先给 verdict，再决定修哪些。
+
+**JSON 清理（可选）：**
+运行 `i18n-validate.js --check-json` 检查翻译 JSON 中的可疑条目（第三方库、数据映射字段等），可选清理。
 
 ### 步骤 4：翻译语言包
 
@@ -343,24 +327,46 @@ for (const [key, val] of Object.entries(data)) {
 node <plugin-path>/skills/i18n-replace/i18n-validate.js <target-dir> --check-translation --i18n-dir <path> --lang <lang>
 ```
 
-### 步骤 5：首次审核（haiku 快速审核）
+### 步骤 5：派发 i18n-code agent 做语义判断（JSON 协议）
 
-派发 `i18n-code` 子代理，首次审核使用 **haiku 模型**快速扫描：
+**前提**：步骤 3.5 已生成 `.i18n-issues.json`，且退出码为 1 或 2。
+
+派发 `i18n-code` 子代理，**必须指定 `model: "haiku"`**，prompt 必须包含 issues.json 路径：
 
 ```
 subagent: i18n-code
 model: haiku
-task: 审核 i18n 替换
-prompt: 对比 <目标路径> 下文件国际化前后的逻辑差异，判断 i18n 替换是否改变了原有代码逻辑。项目类型为 <type>。重点检查：1）比较运算符/switch/case 中的字符串是否被误替换；2）对象 key、API 参数、路由标识是否被替换；3）data-i18n 值与文本是否一致（HTML 项目）；4）代码结构是否被意外修改（属性丢失等）。返回审核结果：通过/未通过，以及具体问题列表。
+task: 对 i18n-validate 产出的 issues.json 做语义判断
+prompt: |
+  请 Read 文件 <target-dir>/.i18n-issues.json（由 i18n-validate 生成）。
+  对每一条 issue 按 agent 判断手册给出 verdict：
+  - confirmed: 真问题
+  - falsePositive: 误报（必须说明原因）
+  - needsContext: 需要补充上下文（必须指明要 Read 哪个文件哪一段）
+  严格按 JSON schema 输出 verdicts，包裹在 ```json``` 代码块中。
+  项目类型: <type>。
 ```
 
-**⚠️ 全项目审核要求（实战经验：模块级审核遗漏 50+ 高危问题）：**
+**主线程收到 verdicts 后的硬约束**：
 
-仅对当前模块做子代理审核**不够**。每完成 3-5 个模块后，必须对已完成的所有模块做一次全量扫描：
+1. **数量校验**：`verdicts.length === issues.length` —— 不匹配则报"偷懒警告"，重派一次
+2. **reason 长度校验**：每条 verdict 的 reason 至少 20 字
+3. **falsePositive 必须有原因**
+4. **needsContext 必须指明文件路径和范围**，主线程按需 Read 上下文并重派
+
+**修复策略**：
+
+- 对所有 `confirmed` 的 verdict，按 `fixSuggestion` 在主线程修复（不派发子代理）
+- 对 `needsContext` 的 verdict，主线程先补充上下文再重派
+- 对 `falsePositive` 的 verdict，不修复，但记录到审核日志
+
+**修复后重跑 validator 确认清零**：
 
 ```bash
-node <plugin-path>/skills/i18n-replace/i18n-validate.js <project-src> --type vue
+node <plugin-path>/skills/i18n-replace/i18n-validate.js <target-dir> --type <type> --format json --out <target-dir>/.i18n-issues.json
 ```
+
+**循环上限**：如果循环 3 轮仍有 🔴/🟠，输出"疑难问题清单"交人工处理，不要死循环。
 
 ### 步骤 6：审核循环
 
