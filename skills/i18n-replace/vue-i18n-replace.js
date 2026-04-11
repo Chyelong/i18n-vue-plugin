@@ -275,7 +275,8 @@ class VueI18nReplacer {
       // 没有中文，跳过
       if (!HAS_CHINESE.test(text)) return match;
 
-      let trimmed = text.trim();
+      // A2 fix: 合并换行/多空白为单个空格，避免 Vue 2 buble "Unterminated string constant" 报错
+      let trimmed = text.replace(/\s+/g, ' ').trim();
       if (!trimmed) return match;
 
       // 检查是否错误匹配了属性值中的 > 符号
@@ -367,7 +368,7 @@ class VueI18nReplacer {
         return part.value;
       } else {
         // 普通文本部分
-        const trimmedPart = part.value.trim();
+        const trimmedPart = part.value.replace(/\s+/g, ' ').trim();
         if (!trimmedPart || !HAS_CHINESE.test(trimmedPart)) {
           return part.value;
         }

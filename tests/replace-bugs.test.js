@@ -27,6 +27,26 @@ describe('replace-bugs sanity', () => {
   });
 });
 
+describe('A2 Vue: multiline text must be collapsed to single line', () => {
+  it('$t() content should not contain newlines', () => {
+    const replacer = new VueI18nReplacer({ dryRun: true });
+    replacer.currentFile = 'test.vue';
+    const input = readFixture('vue/A2-multiline-text.vue');
+    const output = replacer.processVueFile(input);
+
+    // 反例：$t('...') 内部不应有换行（Vue 2 buble 会报 Unterminated string）
+    const tCalls = output.match(/\$t\(['"][^'"]*['"]\)/g) || [];
+    for (const call of tCalls) {
+      assert.doesNotMatch(call, /\n/,
+        `$t() call should not contain newline: ${JSON.stringify(call)}`);
+    }
+
+    // 正例：应有合并后的单行 $t()（换行 → 空格）
+    assert.match(output, /\$t\(['"]包时段或时长，不可用于计局台桌，从计时台桌更换到 ?计局台桌包时套餐将会失效。['"]\)/,
+      'Multiline text should be collapsed to single line');
+  });
+});
+
 describe('A1 HTML: HTML comment must not enter data-i18n', () => {
   it('data-i18n should contain only chinese text, not comment', () => {
     const replacer = new HtmlI18nReplacer({ dryRun: true });
