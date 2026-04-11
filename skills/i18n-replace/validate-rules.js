@@ -67,9 +67,38 @@ const A_RULES_COMMON = [
   },
 ];
 
+// ===== Phase 1 新增：wx 专有规则 =====
+
+const A_RULES_WX = [
+  {
+    id: 'A3', category: 'pattern', scope: 'wx',
+    regex: /\$t\[[^\]]*\$t\[/,
+    severity: '🔴',
+    name: 'WXML 嵌套 $t[...$t[...]]',
+    description: 'WXML 模板编译会报错',
+    fix: '只保留外层 $t[]，内层用变量或字面量'
+  },
+  {
+    id: 'A10', category: 'pattern', scope: 'wx',
+    regex: /,\s*,/,
+    severity: '🟠',
+    name: 'wx 双逗号语法错误',
+    description: '替换脚本追加 $t 到解构时产生双逗号',
+    fix: '删除多余逗号'
+  },
+  {
+    id: 'A11', category: 'pattern', scope: 'wx',
+    regex: /\$t\s*\([^)]*\)\)\)/,
+    severity: '🟠',
+    name: 'wx 多余闭合括号',
+    description: '替换脚本包裹 $t 时多加了一个 )（三个连续 )）',
+    fix: '删除多余的 )'
+  },
+];
+
 // 把 A 类规则同时追加到三种项目类型
 VUE_RULES.push(...A_RULES_COMMON);
-WX_RULES.push(...A_RULES_COMMON);
+WX_RULES.push(...A_RULES_COMMON, ...A_RULES_WX);
 HTML_RULES.push(...A_RULES_COMMON);
 
 function getRulesForType(type) {

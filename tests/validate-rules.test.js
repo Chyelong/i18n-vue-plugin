@@ -38,4 +38,50 @@ describe('Phase 1 rules', () => {
       assert.doesNotMatch(negative, rule.regex);
     });
   });
+
+  describe('A3 - WXML 嵌套 $t[...$t[...]]', () => {
+    const rule = findRule('A3');
+    it('rule exists', () => {
+      assert.ok(rule);
+      assert.equal(rule.severity, '🔴');
+    });
+    it('matches nested $t[] in wxml', () => {
+      const positive = "{{$t['单价' + $t['元']]}}";
+      assert.match(positive, rule.regex);
+    });
+    it('does not match single $t[]', () => {
+      const negative = "{{$t['单价']}}{{item.price}}";
+      assert.doesNotMatch(negative, rule.regex);
+    });
+  });
+
+  describe('A10 - wx 双逗号', () => {
+    const rule = findRule('A10');
+    it('rule exists', () => {
+      assert.ok(rule);
+    });
+    it('matches double comma after $t', () => {
+      const positive = "const { obtain,, $t } = this.data;";
+      assert.match(positive, rule.regex);
+    });
+    it('does not match normal comma', () => {
+      const negative = "const { obtain, $t } = this.data;";
+      assert.doesNotMatch(negative, rule.regex);
+    });
+  });
+
+  describe('A11 - wx 多余括号', () => {
+    const rule = findRule('A11');
+    it('rule exists', () => {
+      assert.ok(rule);
+    });
+    it('matches 3 consecutive closing parens after $t', () => {
+      const positive = "Toast(global.$t('成功')))";
+      assert.match(positive, rule.regex);
+    });
+    it('does not match normal nested call (2 closing parens)', () => {
+      const negative = "Toast(global.$t('成功'))";
+      assert.doesNotMatch(negative, rule.regex);
+    });
+  });
 });
