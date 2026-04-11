@@ -27,6 +27,66 @@ describe('replace-bugs sanity', () => {
   });
 });
 
+describe('B1 Vue: body field should be skipped', () => {
+  it('body: "中文" should not be wrapped', () => {
+    const replacer = new VueI18nReplacer({ dryRun: true });
+    replacer.currentFile = 'test.js';
+    const input = readFixture('vue/B1-body-field.js');
+    const output = replacer.processScript(input);
+    assert.match(output, /body:\s*['"]包时套餐充值['"]/,
+      'body value must remain original');
+    assert.doesNotMatch(output, /body:\s*window\.\$t/,
+      'body field must not be wrapped');
+  });
+});
+
+describe('B2 Vue: $mode field should be skipped', () => {
+  it('$mode: "中文" should not be wrapped', () => {
+    const replacer = new VueI18nReplacer({ dryRun: true });
+    replacer.currentFile = 'test.js';
+    const input = readFixture('vue/B2-dollar-mode.js');
+    const output = replacer.processScript(input);
+    assert.match(output, /\$mode:\s*['"]买赠['"]/);
+    assert.doesNotMatch(output, /\$mode:\s*window\.\$t/);
+  });
+});
+
+describe('B3 Vue: checkOperate name should be skipped', () => {
+  it('checkOperate({ name: "中文" }) should not be wrapped', () => {
+    const replacer = new VueI18nReplacer({ dryRun: true });
+    replacer.currentFile = 'test.js';
+    const input = readFixture('vue/B3-check-operate.js');
+    const output = replacer.processScript(input);
+    assert.match(output, /name:\s*['"]订座['"]/);
+    assert.doesNotMatch(output, /name:\s*window\.\$t\(['"]订座/);
+  });
+});
+
+describe('B4 Vue: dual-use field assignment should be skipped', () => {
+  it('tag_name/tag_box_name/recharge_tag_name = "中文" should not be wrapped', () => {
+    const replacer = new VueI18nReplacer({ dryRun: true });
+    replacer.currentFile = 'test.js';
+    const input = readFixture('vue/B4-dual-use-field.js');
+    const output = replacer.processScript(input);
+    assert.match(output, /tag_name\s*=\s*['"]组合套餐['"]/);
+    assert.match(output, /tag_box_name\s*=\s*['"]套餐盒['"]/);
+    assert.match(output, /recharge_tag_name\s*=\s*['"]充值标签['"]/);
+    assert.doesNotMatch(output, /tag_name\s*=\s*window\.\$t/);
+  });
+});
+
+describe('B5 Vue: object literal key should be skipped', () => {
+  it('{"中文": value} should not become {window.$t("中文"): value}', () => {
+    const replacer = new VueI18nReplacer({ dryRun: true });
+    replacer.currentFile = 'test.js';
+    const input = readFixture('vue/B5-object-key.js');
+    const output = replacer.processScript(input);
+    assert.match(output, /['"]绑定用户['"]:\s*['"]bind['"]/);
+    assert.match(output, /['"]解绑用户['"]:\s*['"]unbind['"]/);
+    assert.doesNotMatch(output, /window\.\$t\(['"]绑定用户['"]\)\s*:/);
+  });
+});
+
 describe('A3 Vue: smart quote wrapping avoids \\" escape', () => {
   it('strings with only " are wrapped in single quotes without escaping', () => {
     const replacer = new VueI18nReplacer({ dryRun: true });

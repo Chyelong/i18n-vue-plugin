@@ -56,6 +56,11 @@ const {
   SWITCH_CASE_REGEX,
   BRACKET_ACCESS_REGEX,
   INDEX_MATCH_REGEX,
+  BODY_FIELD_REGEX,
+  MODE_FIELD_REGEX,
+  CHECK_OPERATE_NAME_REGEX,
+  DUAL_USE_FIELD_REGEX,
+  OBJECT_KEY_AFTER_REGEX,
 } = require('./shared-patterns');
 
 // Vue 独有：含 habit 支持的存储键检测
@@ -516,6 +521,37 @@ class VueI18nReplacer {
         // indexOf/includes 参数
         if (INDEX_MATCH_REGEX.test(beforeMatch)) {
           this.skippedLogic.push({ file: this.currentFile, text, reason: 'indexOf/includes 匹配值（可能匹配后端数据）', line: line.trim() });
+          return match;
+        }
+
+        // B1: body 字段（支付协议）
+        if (BODY_FIELD_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: 'body 字段（支付协议，不翻译）', line: line.trim() });
+          return match;
+        }
+
+        // B2: $mode 业务标识
+        if (MODE_FIELD_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: '$mode 业务标识（不翻译）', line: line.trim() });
+          return match;
+        }
+
+        // B3: checkOperate name 参数
+        if (CHECK_OPERATE_NAME_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: 'checkOperate name 参数（内部用 indexOf 匹配原文）', line: line.trim() });
+          return match;
+        }
+
+        // B4: 双用途字段赋值
+        if (DUAL_USE_FIELD_REGEX.test(beforeMatch)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: '双用途字段赋值（后端数据层不翻译）', line: line.trim() });
+          return match;
+        }
+
+        // B5: 对象字面量 key（afterMatch 检测）
+        const afterMatchB5 = line.substring(matchIndex + match.length);
+        if (OBJECT_KEY_AFTER_REGEX.test(afterMatchB5)) {
+          this.skippedLogic.push({ file: this.currentFile, text, reason: '对象字面量 key（JS 语法错误）', line: line.trim() });
           return match;
         }
 
