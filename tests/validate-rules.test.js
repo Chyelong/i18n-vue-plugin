@@ -245,3 +245,27 @@ describe('C2 - JSON key 简繁漂移', () => {
     assert.ok(issues.some(i => i.name === 'JSON key 简繁漂移'));
   });
 });
+
+describe('C3 - 重复翻译值提醒', () => {
+  const fixturePath = path.join(__dirname, 'fixtures/validate-phase1/translations');
+  const { detectDuplicateValues } = require('../skills/i18n-replace/i18n-validate');
+
+  it('groups keys with same translation value', () => {
+    const issues = detectDuplicateValues(path.join(fixturePath, 'duplicate-values.json'));
+    assert.ok(issues.length >= 1, 'should detect duplicate translation values');
+    assert.ok(issues.some(i => i.name === '重复翻译值'));
+  });
+});
+
+describe('C4 - 空值白名单', () => {
+  const fixturePath = path.join(__dirname, 'fixtures/validate-phase1/translations');
+  const { detectEmptyValues } = require('../skills/i18n-replace/i18n-validate');
+
+  it('allows whitelisted empty values (￥) but flags others', () => {
+    const issues = detectEmptyValues(path.join(fixturePath, 'duplicate-values.json'));
+    // ￥ should NOT be flagged
+    assert.ok(!issues.some(i => i.content && i.content.includes('"￥"')), '￥ should be whitelisted');
+    // 未翻译 SHOULD be flagged
+    assert.ok(issues.some(i => i.content && i.content.includes('未翻译')), '未翻译 should be flagged');
+  });
+});

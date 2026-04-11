@@ -109,11 +109,7 @@ function validateTranslationJSON(i18nDirPath, langCode) {
     return issues;
   }
 
-  // 空值遗漏
-  const emptyKeys = Object.entries(data).filter(([, v]) => typeof v === 'string' && v.trim() === '').map(([k]) => k);
-  if (emptyKeys.length > 0) {
-    issues.push({ severity: '🟠', name: `未翻译空值 (${emptyKeys.length})`, content: emptyKeys.slice(0, 10).join(', ') });
-  }
+  // 空值遗漏由 detectEmptyValues 替代（带白名单），此处不再重复检查
 
   // 插值变量一致性
   const varRe = /\{([^}]+)\}/g;
@@ -303,6 +299,69 @@ function detectKeyDrift(jsonFilePath) {
   return issues;
 }
 
+/**
+ * C3: 检测重复翻译值（不同 key 翻译成相同 value）
+ * 用于提醒翻译者区分语境（如"总价/总计/合计"全译为 Total）
+ */
+function detectDuplicateValues(jsonFilePath) {
+  const issues = [];
+  let data;
+  try {
+    const content = fs.readFileSync(jsonFilePath, 'utf-8');
+    data = jsonFilePath.endsWith('.js')
+      ? JSON.parse(content.replace(/^module\.exports\s*=\s*/, '').replace(/\s*;?\s*$/, ''))
+      : JSON.parse(content);
+  } catch {
+    return issues;
+  }
+  const valMap = new Map();
+  for (const [k, v] of Object.entries(data)) {
+    if (typeof v !== 'string' || v.trim() === '') continue;
+    if (!valMap.has(v)) valMap.set(v, []);
+    valMap.get(v).push(k);
+  }
+  for (const [v, keys] of valMap.entries()) {
+    if (keys.length >= 2) {
+      issues.push({
+        file: jsonFilePath,
+        severity: '🟡',
+        name: '重复翻译值',
+        content: `"${v}" ← [${keys.join(', ')}]`
+      });
+    }
+  }
+  return issues;
+}
+
+/**
+ * C4: 检测未翻译空值，支持白名单（￥/¥ 是允许的）
+ */
+const EMPTY_VALUE_WHITELIST = new Set(['\uFFE5', '\u00A5']);
+
+function detectEmptyValues(jsonFilePath) {
+  const issues = [];
+  let data;
+  try {
+    const content = fs.readFileSync(jsonFilePath, 'utf-8');
+    data = jsonFilePath.endsWith('.js')
+      ? JSON.parse(content.replace(/^module\.exports\s*=\s*/, '').replace(/\s*;?\s*$/, ''))
+      : JSON.parse(content);
+  } catch {
+    return issues;
+  }
+  for (const [k, v] of Object.entries(data)) {
+    if (typeof v !== 'string' || v.trim() !== '') continue;
+    if (EMPTY_VALUE_WHITELIST.has(k)) continue;
+    issues.push({
+      file: jsonFilePath,
+      severity: '🟠',
+      name: '未翻译空值',
+      content: `"${k}" 空值未翻译`
+    });
+  }
+  return issues;
+}
+
 // ===== File Collection =====
 
 function collectFiles(dir, exts) {
@@ -335,6 +394,8 @@ module.exports = {
   scanYenUsageInCode,
   detectVarNameTranslated,
   detectKeyDrift,
+  detectDuplicateValues,
+  detectEmptyValues,
   collectFiles,
 };
 
@@ -410,6 +471,8 @@ if (require.main === module) {
       allIssues.push(...detectYenCoverage(langResult.filePath, codeUsage));
       allIssues.push(...detectVarNameTranslated(langResult.filePath));
       allIssues.push(...detectKeyDrift(langResult.filePath));
+      allIssues.push(...detectDuplicateValues(langResult.filePath));
+      allIssues.push(...detectEmptyValues(langResult.filePath));
     }
   }
 
