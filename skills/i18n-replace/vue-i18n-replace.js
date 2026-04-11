@@ -133,6 +133,31 @@ class VueI18nReplacer {
   }
 
   /**
+   * 把文本按 HTML 注释占位符切成 segments 序列
+   * @param {string} text 可能含 __HTML_COMMENT_\d+__ 的文本
+   * @returns {{ segments: Array<{type:'text'|'comment', value:string}>, hasComment: boolean }}
+   */
+  stripCommentPlaceholders(text) {
+    const HTML_COMMENT_PH = /__HTML_COMMENT_\d+__/g;
+    const segments = [];
+    let lastIdx = 0;
+    let m;
+    HTML_COMMENT_PH.lastIndex = 0;
+    while ((m = HTML_COMMENT_PH.exec(text)) !== null) {
+      if (m.index > lastIdx) {
+        segments.push({ type: 'text', value: text.slice(lastIdx, m.index) });
+      }
+      segments.push({ type: 'comment', value: m[0] });
+      lastIdx = m.index + m[0].length;
+    }
+    if (lastIdx < text.length) {
+      segments.push({ type: 'text', value: text.slice(lastIdx) });
+    }
+    const hasComment = segments.some(s => s.type === 'comment');
+    return { segments, hasComment };
+  }
+
+  /**
    * 处理 template 部分
    */
   processTemplate(template) {
@@ -276,6 +301,21 @@ class VueI18nReplacer {
 
       if (this.shouldSkip(trimmed, match)) {
         return match;
+      }
+
+      // A1 fix: 如果文本含 HTML 注释占位符，按 segments 分段处理，避免把注释吞进 $t()
+      const { segments, hasComment } = this.stripCommentPlaceholders(trimmed);
+      if (hasComment) {
+        const leadingSpace = text.match(/^\s*/)[0];
+        const trailingSpace = text.match(/\s*$/)[0];
+        const parts = segments.map(seg => {
+          if (seg.type === 'comment') return seg.value; // 占位符保留，后续全局还原
+          const partTrimmed = seg.value.trim();
+          if (!partTrimmed || !HAS_CHINESE.test(partTrimmed)) return seg.value;
+          this.recordText(partTrimmed);
+          return `{{ $t('${this.escapeQuote(partTrimmed)}') }}`;
+        });
+        return `>${leadingSpace}${parts.join('')}${trailingSpace}<`;
       }
 
       this.recordText(trimmed);
