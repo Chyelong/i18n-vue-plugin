@@ -171,4 +171,24 @@ describe('Phase 1 rules', () => {
       assert.match(positive, rule.regex);
     });
   });
+
+  describe('A12 - HTML 注释占位符残留', () => {
+    const rule = findRule('A12');
+    it('rule exists', () => {
+      assert.ok(rule);
+      assert.equal(rule.severity, '🔴');
+    });
+    it('matches HTML_COMMENT placeholder in code', () => {
+      const positive = "{{ $t('__HTML_COMMENT_0__ 感谢！') }}";
+      assert.match(positive, rule.regex);
+    });
+    it('matches placeholder in JSON key', () => {
+      const positive = '"支付支持 __HTML_COMMENT_2__": "..."';
+      assert.match(positive, rule.regex);
+    });
+    it('does not match unrelated text', () => {
+      const negative = "// HTML_COMMENT is a concept";
+      assert.doesNotMatch(negative, rule.regex);
+    });
+  });
 });

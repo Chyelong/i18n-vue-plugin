@@ -114,6 +114,14 @@ const A_RULES_COMMON = [
     description: '字段同时用于后端数据传递和 UI 展示，赋值处翻译会导致后端数据失真',
     fix: '数据层保持原文，模板 {{ $t(item.tag_name) }} 翻译'
   },
+  {
+    id: 'A12', category: 'pattern', scope: 'all',
+    regex: /__HTML_COMMENT_\d+__/,
+    severity: '🔴',
+    name: 'HTML 注释占位符残留',
+    description: '替换脚本误把 HTML 注释吞进 $t()，或占位符未清理',
+    fix: '移除占位符，注释从 $t 中移出'
+  },
 ];
 
 // ===== Phase 1 新增：wx 专有规则 =====
