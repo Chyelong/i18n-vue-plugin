@@ -1,0 +1,17 @@
+# 测试文件夹（本地保留，不纳入 git 追踪）
+tests/
+
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+
+# 日志与临时文件
+*.log
+.spike-*/
+.chain-check/
+.i18n-issues.json
+
+# 系统文件
+.DS_Store
+Thumbs.db
