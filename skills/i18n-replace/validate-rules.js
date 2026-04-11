@@ -98,6 +98,22 @@ const A_RULES_COMMON = [
     description: '后端 msg 是中文，翻译后匹配失败',
     fix: '用 res.code 数值判断或保持原始中文'
   },
+  {
+    id: 'A8', category: 'pattern', scope: 'all',
+    regex: /\bsort_label\s*[=!]==?\s*(?:window\.|global\.)?\$t/,
+    severity: '🟠',
+    name: 'sort_label 截取字段与 $t 比较',
+    description: '后端字典截取值是中文，翻译后比较失败',
+    fix: '保持原始中文比较'
+  },
+  {
+    id: 'A9', category: 'pattern', scope: 'all',
+    regex: /\b(?:tag_name|tag_box_name|recharge_tag_name)\s*=\s*(?:window\.|global\.)?\$t/,
+    severity: '🟠',
+    name: '双用途字段赋值被 $t 包裹',
+    description: '字段同时用于后端数据传递和 UI 展示，赋值处翻译会导致后端数据失真',
+    fix: '数据层保持原文，模板 {{ $t(item.tag_name) }} 翻译'
+  },
 ];
 
 // ===== Phase 1 新增：wx 专有规则 =====

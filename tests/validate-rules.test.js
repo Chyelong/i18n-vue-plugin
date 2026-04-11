@@ -137,4 +137,38 @@ describe('Phase 1 rules', () => {
       assert.match(positive, rule.regex);
     });
   });
+
+  describe('A8 - sort_label 截取字段比较', () => {
+    const rule = findRule('A8');
+    it('rule exists', () => {
+      assert.ok(rule);
+    });
+    it('matches sort_label == $t', () => {
+      const positive = "if (item.sort_label == window.$t('时')) { }";
+      assert.match(positive, rule.regex);
+    });
+    it('matches sort_label !== $t', () => {
+      const positive = "if (sort_label !== $t('天')) { }";
+      assert.match(positive, rule.regex);
+    });
+  });
+
+  describe('A9 - 双用途字段赋值 $t', () => {
+    const rule = findRule('A9');
+    it('rule exists', () => {
+      assert.ok(rule);
+    });
+    it('matches tag_name = $t', () => {
+      const positive = "item.tag_name = window.$t('组合套餐');";
+      assert.match(positive, rule.regex);
+    });
+    it('matches tag_box_name = $t', () => {
+      const positive = "this.tag_box_name = $t('套餐');";
+      assert.match(positive, rule.regex);
+    });
+    it('matches recharge_tag_name = $t', () => {
+      const positive = "recharge_tag_name = window.$t('充值');";
+      assert.match(positive, rule.regex);
+    });
+  });
 });
