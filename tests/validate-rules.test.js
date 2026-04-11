@@ -205,3 +205,21 @@ describe('A13 - JSON 弯引号未转义', () => {
     assert.equal(issues[0].name, 'JSON 弯引号未转义');
   });
 });
+
+describe('A14 - ￥/¥ 双字符映射', () => {
+  const fixturePath = path.join(__dirname, 'fixtures/validate-phase1/translations');
+  const { detectYenCoverage } = require('../skills/i18n-replace/i18n-validate');
+
+  it('detects missing yen when both chars used in code', () => {
+    const codeUsage = { fullwidth: true, halfwidth: true };
+    const issues = detectYenCoverage(path.join(fixturePath, 'incomplete-yen.json'), codeUsage);
+    assert.ok(issues.length > 0, 'should flag missing yen coverage');
+    assert.equal(issues[0].severity, '🟡');
+  });
+
+  it('no issue when only fullwidth used in code', () => {
+    const codeUsage = { fullwidth: true, halfwidth: false };
+    const issues = detectYenCoverage(path.join(fixturePath, 'incomplete-yen.json'), codeUsage);
+    assert.equal(issues.length, 0);
+  });
+});

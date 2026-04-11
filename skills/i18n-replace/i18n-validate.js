@@ -172,6 +172,54 @@ function detectCurlyQuotes(jsonFilePath) {
   return issues;
 }
 
+/**
+ * A14: 检测 ￥ (U+FFE5) / ¥ (U+00A5) 双字符映射完整性
+ * 如果代码同时使用两种字符，翻译包必须两个字符都有映射 key
+ */
+function detectYenCoverage(jsonFilePath, codeUsage) {
+  const issues = [];
+  if (!codeUsage.fullwidth || !codeUsage.halfwidth) return issues;
+  if (!fs.existsSync(jsonFilePath)) return issues;
+  let data;
+  try {
+    const content = fs.readFileSync(jsonFilePath, 'utf-8');
+    const parsed = jsonFilePath.endsWith('.js')
+      ? JSON.parse(content.replace(/^module\.exports\s*=\s*/, '').replace(/\s*;?\s*$/, ''))
+      : JSON.parse(content);
+    data = parsed;
+  } catch {
+    return issues;
+  }
+  const hasFullwidth = Object.keys(data).some(k => k.includes('\uFFE5'));
+  const hasHalfwidth = Object.keys(data).some(k => k.includes('\u00A5'));
+  if (!hasFullwidth || !hasHalfwidth) {
+    const missing = [];
+    if (!hasFullwidth) missing.push('￥(U+FFE5)');
+    if (!hasHalfwidth) missing.push('¥(U+00A5)');
+    issues.push({
+      file: jsonFilePath,
+      severity: '🟡',
+      name: '￥/¥ 双字符映射不完整',
+      content: `代码使用两种字符但翻译包缺少 ${missing.join(', ')}`
+    });
+  }
+  return issues;
+}
+
+/**
+ * 扫描代码文件检测是否同时使用了 ￥ 和 ¥ 两种字符
+ */
+function scanYenUsageInCode(files) {
+  let fullwidth = false, halfwidth = false;
+  for (const f of files) {
+    const content = fs.readFileSync(f, 'utf-8');
+    if (content.includes('\uFFE5')) fullwidth = true;
+    if (content.includes('\u00A5')) halfwidth = true;
+    if (fullwidth && halfwidth) break;
+  }
+  return { fullwidth, halfwidth };
+}
+
 // ===== File Collection =====
 
 function collectFiles(dir, exts) {
@@ -200,6 +248,8 @@ module.exports = {
   validateTranslationJSON,
   detectSuspiciousKeys,
   detectCurlyQuotes,
+  detectYenCoverage,
+  scanYenUsageInCode,
   collectFiles,
 };
 
@@ -271,6 +321,8 @@ if (require.main === module) {
     const langResult = readLangData(i18nDir, lang);
     if (langResult) {
       allIssues.push(...detectCurlyQuotes(langResult.filePath));
+      const codeUsage = scanYenUsageInCode(files);
+      allIssues.push(...detectYenCoverage(langResult.filePath, codeUsage));
     }
   }
 
